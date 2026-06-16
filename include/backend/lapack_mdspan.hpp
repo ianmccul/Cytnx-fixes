@@ -6,6 +6,7 @@
 #include "mdspan.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <complex>
 #include <limits>
 #include <type_traits>
@@ -13,33 +14,40 @@
 
 #ifndef BACKEND_TORCH
 
-extern "C" {
-void sgesvd_(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n, float *a,
-             const blas_int *lda, float *s, float *u, const blas_int *ldu, float *vt,
-             const blas_int *ldvt, float *work, const blas_int *lwork, blas_int *info);
-void dgesvd_(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n, double *a,
-             const blas_int *lda, double *s, double *u, const blas_int *ldu, double *vt,
-             const blas_int *ldvt, double *work, const blas_int *lwork, blas_int *info);
-void cgesvd_(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
-             std::complex<float> *a, const blas_int *lda, float *s, std::complex<float> *u,
-             const blas_int *ldu, std::complex<float> *vt, const blas_int *ldvt,
-             std::complex<float> *work, const blas_int *lwork, float *rwork, blas_int *info);
-void zgesvd_(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
-             std::complex<double> *a, const blas_int *lda, double *s, std::complex<double> *u,
-             const blas_int *ldu, std::complex<double> *vt, const blas_int *ldvt,
-             std::complex<double> *work, const blas_int *lwork, double *rwork, blas_int *info);
+namespace cytnx::lapack::fortran {
 
-void ssyev_(const char *jobz, const char *uplo, const blas_int *n, float *a, const blas_int *lda,
-            float *w, float *work, const blas_int *lwork, blas_int *info);
-void dsyev_(const char *jobz, const char *uplo, const blas_int *n, double *a, const blas_int *lda,
-            double *w, double *work, const blas_int *lwork, blas_int *info);
-void cheev_(const char *jobz, const char *uplo, const blas_int *n, std::complex<float> *a,
-            const blas_int *lda, float *w, std::complex<float> *work, const blas_int *lwork,
-            float *rwork, blas_int *info);
-void zheev_(const char *jobz, const char *uplo, const blas_int *n, std::complex<double> *a,
-            const blas_int *lda, double *w, std::complex<double> *work, const blas_int *lwork,
-            double *rwork, blas_int *info);
-}
+  // The raw Fortran ABI is isolated here. LAPACK routines with character arguments may need
+  // compiler-specific hidden length handling; this namespace can later be replaced by ISO_C_BINDING
+  // shims without changing the mdspan-facing wrappers below.
+  extern "C" {
+  void sgesvd_(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n, float *a,
+               const blas_int *lda, float *s, float *u, const blas_int *ldu, float *vt,
+               const blas_int *ldvt, float *work, const blas_int *lwork, blas_int *info);
+  void dgesvd_(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n, double *a,
+               const blas_int *lda, double *s, double *u, const blas_int *ldu, double *vt,
+               const blas_int *ldvt, double *work, const blas_int *lwork, blas_int *info);
+  void cgesvd_(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
+               std::complex<float> *a, const blas_int *lda, float *s, std::complex<float> *u,
+               const blas_int *ldu, std::complex<float> *vt, const blas_int *ldvt,
+               std::complex<float> *work, const blas_int *lwork, float *rwork, blas_int *info);
+  void zgesvd_(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
+               std::complex<double> *a, const blas_int *lda, double *s, std::complex<double> *u,
+               const blas_int *ldu, std::complex<double> *vt, const blas_int *ldvt,
+               std::complex<double> *work, const blas_int *lwork, double *rwork, blas_int *info);
+
+  void ssyev_(const char *jobz, const char *uplo, const blas_int *n, float *a, const blas_int *lda,
+              float *w, float *work, const blas_int *lwork, blas_int *info);
+  void dsyev_(const char *jobz, const char *uplo, const blas_int *n, double *a, const blas_int *lda,
+              double *w, double *work, const blas_int *lwork, blas_int *info);
+  void cheev_(const char *jobz, const char *uplo, const blas_int *n, std::complex<float> *a,
+              const blas_int *lda, float *w, std::complex<float> *work, const blas_int *lwork,
+              float *rwork, blas_int *info);
+  void zheev_(const char *jobz, const char *uplo, const blas_int *n, std::complex<double> *a,
+              const blas_int *lda, double *w, std::complex<double> *work, const blas_int *lwork,
+              double *rwork, blas_int *info);
+  }
+
+}  // namespace cytnx::lapack::fortran
 
 namespace cytnx::lapack {
 
@@ -59,20 +67,52 @@ namespace cytnx::lapack {
     using real_scalar_t = typename real_scalar<std::remove_cv_t<T>>::type;
 
     template <class T>
-    constexpr bool is_lapack_scalar_v =
+    concept RealLapackScalar =
+      std::is_same_v<std::remove_cv_t<T>, float> || std::is_same_v<std::remove_cv_t<T>, double>;
+
+    template <class T>
+    concept LapackScalar =
       std::is_same_v<std::remove_cv_t<T>, float> || std::is_same_v<std::remove_cv_t<T>, double> ||
       std::is_same_v<std::remove_cv_t<T>, std::complex<float>> ||
       std::is_same_v<std::remove_cv_t<T>, std::complex<double>>;
 
     template <class View>
-    constexpr bool is_layout_right_view_v =
-      std::is_same_v<typename View::layout_type, stdex::layout_right>;
+    concept MdspanView = requires(View view) {
+      typename View::element_type;
+      typename View::layout_type;
+      { View::rank() } -> std::convertible_to<std::size_t>;
+      { view.extent(std::size_t{}) } -> std::convertible_to<std::size_t>;
+      { view.data_handle() } -> std::convertible_to<typename View::element_type *>;
+    };
 
     template <class View>
-    constexpr bool is_lapack_vector_v = View::rank() == 1 && is_layout_right_view_v<View>;
+    concept LayoutRightVector = MdspanView<View> && View::rank() == 1 &&
+                                std::is_same_v<typename View::layout_type, stdex::layout_right>;
 
     template <class View>
-    constexpr bool is_lapack_matrix_v = View::rank() == 2 && is_layout_right_view_v<View>;
+    concept LayoutRightMatrix = MdspanView<View> && View::rank() == 2 &&
+                                std::is_same_v<typename View::layout_type, stdex::layout_right>;
+
+    template <class View>
+    concept LapackMatrix = LayoutRightMatrix<View> && LapackScalar<typename View::element_type>;
+
+    template <class Vector, class Scalar>
+    concept RealVectorFor = LayoutRightVector<Vector> &&
+                            std::same_as<typename Vector::element_type, real_scalar_t<Scalar>>;
+
+    template <class Matrix, class Vector>
+    concept GesvdValuesArgs =
+      LapackMatrix<Matrix> && RealVectorFor<Vector, typename Matrix::element_type>;
+
+    template <class Matrix, class Vector, class LeftSingularVectors, class RightSingularVectors>
+    concept GesvdThinArgs =
+      GesvdValuesArgs<Matrix, Vector> && LayoutRightMatrix<LeftSingularVectors> &&
+      LayoutRightMatrix<RightSingularVectors> &&
+      std::same_as<typename LeftSingularVectors::element_type, typename Matrix::element_type> &&
+      std::same_as<typename RightSingularVectors::element_type, typename Matrix::element_type>;
+
+    template <class Matrix, class Vector>
+    concept EighArgs = LapackMatrix<Matrix> && RealVectorFor<Vector, typename Matrix::element_type>;
 
     inline blas_int to_blas_int(std::size_t value, const char *name) {
       cytnx_error_msg(value > static_cast<std::size_t>(std::numeric_limits<blas_int>::max()),
@@ -95,14 +135,14 @@ namespace cytnx::lapack {
                       float *a, const blas_int *lda, float *s, float *u, const blas_int *ldu,
                       float *vt, const blas_int *ldvt, float *work, const blas_int *lwork,
                       blas_int *info) {
-      sgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
+      fortran::sgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
     }
 
     inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
                       double *a, const blas_int *lda, double *s, double *u, const blas_int *ldu,
                       double *vt, const blas_int *ldvt, double *work, const blas_int *lwork,
                       blas_int *info) {
-      dgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
+      fortran::dgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
     }
 
     inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
@@ -110,7 +150,7 @@ namespace cytnx::lapack {
                       const blas_int *ldu, std::complex<float> *vt, const blas_int *ldvt,
                       std::complex<float> *work, const blas_int *lwork, float *rwork,
                       blas_int *info) {
-      cgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, info);
+      fortran::cgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, info);
     }
 
     inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
@@ -118,31 +158,31 @@ namespace cytnx::lapack {
                       std::complex<double> *u, const blas_int *ldu, std::complex<double> *vt,
                       const blas_int *ldvt, std::complex<double> *work, const blas_int *lwork,
                       double *rwork, blas_int *info) {
-      zgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, info);
+      fortran::zgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, info);
     }
 
     inline void syev(const char *jobz, const char *uplo, const blas_int *n, float *a,
                      const blas_int *lda, float *w, float *work, const blas_int *lwork,
                      blas_int *info) {
-      ssyev_(jobz, uplo, n, a, lda, w, work, lwork, info);
+      fortran::ssyev_(jobz, uplo, n, a, lda, w, work, lwork, info);
     }
 
     inline void syev(const char *jobz, const char *uplo, const blas_int *n, double *a,
                      const blas_int *lda, double *w, double *work, const blas_int *lwork,
                      blas_int *info) {
-      dsyev_(jobz, uplo, n, a, lda, w, work, lwork, info);
+      fortran::dsyev_(jobz, uplo, n, a, lda, w, work, lwork, info);
     }
 
     inline void heev(const char *jobz, const char *uplo, const blas_int *n, std::complex<float> *a,
                      const blas_int *lda, float *w, std::complex<float> *work,
                      const blas_int *lwork, float *rwork, blas_int *info) {
-      cheev_(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
+      fortran::cheev_(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
     }
 
     inline void heev(const char *jobz, const char *uplo, const blas_int *n, std::complex<double> *a,
                      const blas_int *lda, double *w, std::complex<double> *work,
                      const blas_int *lwork, double *rwork, blas_int *info) {
-      zheev_(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
+      fortran::zheev_(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
     }
 
   }  // namespace native
@@ -150,13 +190,10 @@ namespace cytnx::lapack {
   namespace row_major {
 
     template <class Matrix, class Vector>
+      requires detail::GesvdValuesArgs<Matrix, Vector>
     int gesvd(Matrix a, Vector s) {
       using scalar_type = typename Matrix::element_type;
       using real_type = detail::real_scalar_t<scalar_type>;
-      static_assert(detail::is_lapack_matrix_v<Matrix>);
-      static_assert(detail::is_lapack_vector_v<Vector>);
-      static_assert(detail::is_lapack_scalar_v<scalar_type>);
-      static_assert(std::is_same_v<typename Vector::element_type, real_type>);
 
       const auto rows = a.extent(0);
       const auto cols = a.extent(1);
@@ -171,7 +208,7 @@ namespace cytnx::lapack {
       blas_int info = 0;
       blas_int lwork = -1;
 
-      if constexpr (std::is_same_v<scalar_type, float> || std::is_same_v<scalar_type, double>) {
+      if constexpr (detail::RealLapackScalar<scalar_type>) {
         scalar_type work_query{};
         native::gesvd("N", "N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
                       nullptr, &one, nullptr, &one, &work_query, &lwork, &info);
@@ -197,17 +234,10 @@ namespace cytnx::lapack {
     }
 
     template <class Matrix, class Vector, class LeftSingularVectors, class RightSingularVectors>
+      requires detail::GesvdThinArgs<Matrix, Vector, LeftSingularVectors, RightSingularVectors>
     int gesvd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
       using scalar_type = typename Matrix::element_type;
       using real_type = detail::real_scalar_t<scalar_type>;
-      static_assert(detail::is_lapack_matrix_v<Matrix>);
-      static_assert(detail::is_lapack_vector_v<Vector>);
-      static_assert(detail::is_lapack_matrix_v<LeftSingularVectors>);
-      static_assert(detail::is_lapack_matrix_v<RightSingularVectors>);
-      static_assert(detail::is_lapack_scalar_v<scalar_type>);
-      static_assert(std::is_same_v<typename Vector::element_type, real_type>);
-      static_assert(std::is_same_v<typename LeftSingularVectors::element_type, scalar_type>);
-      static_assert(std::is_same_v<typename RightSingularVectors::element_type, scalar_type>);
 
       const auto rows = a.extent(0);
       const auto cols = a.extent(1);
@@ -227,7 +257,7 @@ namespace cytnx::lapack {
       blas_int info = 0;
       blas_int lwork = -1;
 
-      if constexpr (std::is_same_v<scalar_type, float> || std::is_same_v<scalar_type, double>) {
+      if constexpr (detail::RealLapackScalar<scalar_type>) {
         scalar_type work_query{};
         native::gesvd("S", "S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
                       vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, &work_query,
@@ -257,13 +287,10 @@ namespace cytnx::lapack {
     }
 
     template <class Matrix, class Vector>
+      requires detail::EighArgs<Matrix, Vector>
     int eigh(char jobz, char uplo, Matrix a, Vector w) {
       using scalar_type = typename Matrix::element_type;
       using real_type = detail::real_scalar_t<scalar_type>;
-      static_assert(detail::is_lapack_matrix_v<Matrix>);
-      static_assert(detail::is_lapack_vector_v<Vector>);
-      static_assert(detail::is_lapack_scalar_v<scalar_type>);
-      static_assert(std::is_same_v<typename Vector::element_type, real_type>);
 
       const auto n = a.extent(0);
       cytnx_error_msg(a.extent(1) != n, "[ERROR] LAPACK eigh input must be square.%s", "\n");
@@ -276,7 +303,7 @@ namespace cytnx::lapack {
       blas_int info = 0;
       blas_int lwork = -1;
 
-      if constexpr (std::is_same_v<scalar_type, float> || std::is_same_v<scalar_type, double>) {
+      if constexpr (detail::RealLapackScalar<scalar_type>) {
         scalar_type work_query{};
         native::syev(&jobz, &native_uplo, &native_n, a.data_handle(), &lda, w.data_handle(),
                      &work_query, &lwork, &info);
