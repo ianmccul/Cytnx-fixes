@@ -63,6 +63,11 @@ namespace cytnx::lapack::fortran {
               const blas_int *lda, std::complex<double> *w, std::complex<double> *vl,
               const blas_int *ldvl, std::complex<double> *vr, const blas_int *ldvr,
               std::complex<double> *work, const blas_int *lwork, double *rwork, blas_int *info);
+
+  void sstev_(const char *jobz, const blas_int *n, float *d, float *e, float *z,
+              const blas_int *ldz, float *work, blas_int *info);
+  void dstev_(const char *jobz, const blas_int *n, double *d, double *e, double *z,
+              const blas_int *ldz, double *work, blas_int *info);
   }
 
 }  // namespace cytnx::lapack::fortran
@@ -217,6 +222,16 @@ namespace cytnx::lapack {
                        const blas_int *ldvr, std::complex<double> *work, const blas_int *lwork,
                        double *rwork, blas_int *info) {
         fortran::zgeev_(jobvl, jobvr, n, a, lda, w, vl, ldvl, vr, ldvr, work, lwork, rwork, info);
+      }
+
+      inline void stev(const char *jobz, const blas_int *n, float *d, float *e, float *z,
+                       const blas_int *ldz, float *work, blas_int *info) {
+        fortran::sstev_(jobz, n, d, e, z, ldz, work, info);
+      }
+
+      inline void stev(const char *jobz, const blas_int *n, double *d, double *e, double *z,
+                       const blas_int *ldz, double *work, blas_int *info) {
+        fortran::dstev_(jobz, n, d, e, z, ldz, work, info);
       }
 
     }  // namespace native
@@ -410,6 +425,27 @@ namespace cytnx::lapack {
       return info;
     }
 
+    template <RealLapackVector Diagonal, RealLapackVector OffDiagonal>
+      requires mdspan_concepts::SameElementType<Diagonal, OffDiagonal>
+    int stev_values(Diagonal diagonal, OffDiagonal offdiagonal) {
+      using scalar_type = typename Diagonal::element_type;
+
+      const auto n = diagonal.extent(0);
+      const auto min_offdiag = n > 0 ? n - 1 : 0;
+      cytnx_error_msg(offdiagonal.extent(0) < min_offdiag,
+                      "[ERROR] LAPACK stev off-diagonal input is too small.%s", "\n");
+
+      const blas_int native_n = detail::to_blas_int(n, "n");
+      const blas_int ldz = 1;
+      blas_int info = 0;
+      const std::size_t work_size = std::max<std::size_t>(1, n > 1 ? 2 * n - 2 : 1);
+      std::vector<scalar_type> work(work_size);
+
+      native::stev("N", &native_n, diagonal.data_handle(), offdiagonal.data_handle(), nullptr, &ldz,
+                   work.data(), &info);
+      return info;
+    }
+
   }  // namespace lowlevel
 
   namespace detail {
@@ -492,6 +528,19 @@ namespace cytnx::lapack {
     requires LapackEigenvalueVector<Matrix, Vector>
   void eig_values(Matrix a, Vector w) {
     detail::check_lapack_info("geev", lowlevel::geev_values(a, w), a, w);
+  }
+
+  /**
+   * @brief Diagonalize a real symmetric tridiagonal matrix with checked host LAPACK diagnostics.
+   *
+   * The diagonal vector is overwritten with eigenvalues. The off-diagonal vector is LAPACK
+   * workspace and is not preserved.
+   */
+  template <RealLapackVector Diagonal, RealLapackVector OffDiagonal>
+    requires mdspan_concepts::SameElementType<Diagonal, OffDiagonal>
+  void symmetric_tridiagonal_eigh_values(Diagonal diagonal, OffDiagonal offdiagonal) {
+    detail::check_lapack_info("stev", lowlevel::stev_values(diagonal, offdiagonal), diagonal,
+                              offdiagonal);
   }
 
 }  // namespace cytnx::lapack

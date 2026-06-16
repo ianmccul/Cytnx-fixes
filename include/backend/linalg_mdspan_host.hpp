@@ -27,6 +27,10 @@ namespace cytnx::linalg_mdspan_backend {
     static constexpr std::string_view name = "eig_values";
   };
 
+  struct symmetric_tridiagonal_eigh_values_kernel {
+    static constexpr std::string_view name = "symmetric_tridiagonal_eigh_values";
+  };
+
   template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
     requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void run_kernel(svd_values_kernel, Matrix matrix, Vector values) {
@@ -52,6 +56,13 @@ namespace cytnx::linalg_mdspan_backend {
     requires lapack::LapackEigenvalueVector<Matrix, Vector>
   void run_kernel(eig_values_kernel, Matrix matrix, Vector values) {
     lapack::eig_values(matrix, values);
+  }
+
+  template <lapack::RealLapackVector Diagonal, lapack::RealLapackVector OffDiagonal>
+    requires mdspan_concepts::SameElementType<Diagonal, OffDiagonal>
+  void run_kernel(symmetric_tridiagonal_eigh_values_kernel, Diagonal diagonal,
+                  OffDiagonal offdiagonal) {
+    lapack::symmetric_tridiagonal_eigh_values(diagonal, offdiagonal);
   }
 
 }  // namespace cytnx::linalg_mdspan_backend

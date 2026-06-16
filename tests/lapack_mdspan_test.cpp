@@ -212,6 +212,18 @@ namespace {
     EXPECT_TRUE(has_eigenvalue_near(w, complex{-1.0, 0.5}, 1e-12));
   }
 
+  TEST(LapackMdspanTest, StevComputesSymmetricTridiagonalEigenvalues) {
+    std::vector<double> diagonal = {2.0, 3.0};
+    std::vector<double> offdiagonal = {1.0};
+
+    const int info = cytnx::lapack::lowlevel::stev_values(
+      vector_view<double>(diagonal.data(), 2), vector_view<double>(offdiagonal.data(), 1));
+
+    ASSERT_EQ(info, 0);
+    EXPECT_NEAR(diagonal[0], (5.0 - std::sqrt(5.0)) / 2.0, 1e-12);
+    EXPECT_NEAR(diagonal[1], (5.0 + std::sqrt(5.0)) / 2.0, 1e-12);
+  }
+
   TEST(LapackMdspanTest, RowMajorGesvdComputesSingularValues) {
     std::vector<double> a = {
       3.0, 0.0, 0.0, 0.0, 4.0, 0.0,
@@ -313,6 +325,17 @@ namespace {
     EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, -2.0}, 1e-12));
   }
 
+  TEST(LapackMdspanTest, CheckedStevWrapperComputesSymmetricTridiagonalEigenvalues) {
+    std::vector<float> diagonal = {2.0F, 3.0F};
+    std::vector<float> offdiagonal = {1.0F};
+
+    cytnx::lapack::symmetric_tridiagonal_eigh_values(vector_view<float>(diagonal.data(), 2),
+                                                     vector_view<float>(offdiagonal.data(), 1));
+
+    EXPECT_NEAR(diagonal[0], (5.0F - std::sqrt(5.0F)) / 2.0F, 1e-5F);
+    EXPECT_NEAR(diagonal[1], (5.0F + std::sqrt(5.0F)) / 2.0F, 1e-5F);
+  }
+
   TEST(LapackMdspanTest, VariantSvdValuesDispatchesTensorTAlternatives) {
     cytnx::Tensor a = cytnx::zeros({2, 3}, cytnx::Type.Double);
     a.at<double>({0, 0}) = 3.0;
@@ -372,6 +395,17 @@ namespace {
 
     EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, 3.0}, 1e-12));
     EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, -3.0}, 1e-12));
+  }
+
+  TEST(LapackMdspanTest, PublicStevValuesAcceptsRawHostMdspans) {
+    std::vector<double> diagonal = {2.0, 3.0};
+    std::vector<double> offdiagonal = {1.0};
+
+    cytnx::symmetric_tridiagonal_eigh_values(vector_view<double>(diagonal.data(), 2),
+                                             vector_view<double>(offdiagonal.data(), 1));
+
+    EXPECT_NEAR(diagonal[0], (5.0 - std::sqrt(5.0)) / 2.0, 1e-12);
+    EXPECT_NEAR(diagonal[1], (5.0 + std::sqrt(5.0)) / 2.0, 1e-12);
   }
 
 }  // namespace

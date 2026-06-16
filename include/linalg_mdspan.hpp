@@ -76,6 +76,21 @@ namespace cytnx {
                   std::forward<VectorArg>(w));
   }
 
+  /**
+   * @brief Compute eigenvalues of a real symmetric tridiagonal matrix.
+   *
+   * `diagonal` is overwritten with eigenvalues. `offdiagonal` is LAPACK workspace and is not
+   * preserved. Variant arguments dispatch over alternatives and report an error if the active
+   * alternatives are incompatible.
+   */
+  template <class DiagonalArg, class OffDiagonalArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::symmetric_tridiagonal_eigh_values_kernel,
+                                  DiagonalArg, OffDiagonalArg>
+  void symmetric_tridiagonal_eigh_values(DiagonalArg &&diagonal, OffDiagonalArg &&offdiagonal) {
+    invoke_kernel(linalg_mdspan_backend::symmetric_tridiagonal_eigh_values_kernel{},
+                  std::forward<DiagonalArg>(diagonal), std::forward<OffDiagonalArg>(offdiagonal));
+  }
+
 }  // namespace cytnx
 
 #endif  // BACKEND_TORCH
