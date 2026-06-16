@@ -3,10 +3,10 @@
 
 #include "TensorT.hpp"
 #include "TensorT_traits.hpp"
-#include "backend/lapack_mdspan.hpp"
+#include "backend/linalg_mdspan_host.hpp"
 #include "cytnx_error.hpp"
+#include "kernel.hpp"
 
-#include <type_traits>
 #include <utility>
 
 #ifndef BACKEND_TORCH
@@ -18,10 +18,12 @@ namespace cytnx {
     struct call_svd_values {
       template <class Matrix, class Vector>
         requires requires(Matrix &&matrix, Vector &&values) {
-          lapack::svd_values(std::forward<Matrix>(matrix), std::forward<Vector>(values));
+          linalg_mdspan_backend::svd_values(std::forward<Matrix>(matrix),
+                                            std::forward<Vector>(values));
         }
       void operator()(Matrix &&matrix, Vector &&values) const {
-        lapack::svd_values(std::forward<Matrix>(matrix), std::forward<Vector>(values));
+        linalg_mdspan_backend::svd_values(std::forward<Matrix>(matrix),
+                                          std::forward<Vector>(values));
       }
     };
 
@@ -29,15 +31,15 @@ namespace cytnx {
       template <class Matrix, class Vector, class LeftSingularVectors, class RightSingularVectors>
         requires requires(Matrix &&matrix, Vector &&values, LeftSingularVectors &&left,
                           RightSingularVectors &&right) {
-          lapack::svd(std::forward<Matrix>(matrix), std::forward<Vector>(values),
-                      std::forward<LeftSingularVectors>(left),
-                      std::forward<RightSingularVectors>(right));
+          linalg_mdspan_backend::svd(std::forward<Matrix>(matrix), std::forward<Vector>(values),
+                                     std::forward<LeftSingularVectors>(left),
+                                     std::forward<RightSingularVectors>(right));
         }
       void operator()(Matrix &&matrix, Vector &&values, LeftSingularVectors &&left,
                       RightSingularVectors &&right) const {
-        lapack::svd(std::forward<Matrix>(matrix), std::forward<Vector>(values),
-                    std::forward<LeftSingularVectors>(left),
-                    std::forward<RightSingularVectors>(right));
+        linalg_mdspan_backend::svd(std::forward<Matrix>(matrix), std::forward<Vector>(values),
+                                   std::forward<LeftSingularVectors>(left),
+                                   std::forward<RightSingularVectors>(right));
       }
     };
 
@@ -47,12 +49,12 @@ namespace cytnx {
 
       template <class Matrix, class Vector>
         requires requires(Matrix &&matrix, Vector &&values) {
-          lapack::self_adjoint_eigh('N', 'U', std::forward<Matrix>(matrix),
-                                    std::forward<Vector>(values));
+          linalg_mdspan_backend::self_adjoint_eigh('N', 'U', std::forward<Matrix>(matrix),
+                                                   std::forward<Vector>(values));
         }
       void operator()(Matrix &&matrix, Vector &&values) const {
-        lapack::self_adjoint_eigh(jobz, uplo, std::forward<Matrix>(matrix),
-                                  std::forward<Vector>(values));
+        linalg_mdspan_backend::self_adjoint_eigh(jobz, uplo, std::forward<Matrix>(matrix),
+                                                 std::forward<Vector>(values));
       }
     };
 
@@ -67,7 +69,8 @@ namespace cytnx {
   template <class MatrixArg, class VectorArg>
     requires AnyDispatchInvocable<linalg_mdspan_detail::call_svd_values, MatrixArg, VectorArg>
   void svd_values(MatrixArg &&a, VectorArg &&s) {
-    invoke_kernel<linalg_mdspan_detail::call_svd_values>(
+    invoke_kernel(
+      linalg_mdspan_detail::call_svd_values{},
       "[ERROR] svd_values variant alternatives have incompatible dtype, layout, rank, or backend.",
       std::forward<MatrixArg>(a), std::forward<VectorArg>(s));
   }
@@ -84,7 +87,8 @@ namespace cytnx {
     requires AnyDispatchInvocable<linalg_mdspan_detail::call_svd, MatrixArg, VectorArg,
                                   LeftSingularVectorsArg, RightSingularVectorsArg>
   void svd(MatrixArg &&a, VectorArg &&s, LeftSingularVectorsArg &&u, RightSingularVectorsArg &&vt) {
-    invoke_kernel<linalg_mdspan_detail::call_svd>(
+    invoke_kernel(
+      linalg_mdspan_detail::call_svd{},
       "[ERROR] svd variant alternatives have incompatible dtype, layout, rank, or backend.",
       std::forward<MatrixArg>(a), std::forward<VectorArg>(s),
       std::forward<LeftSingularVectorsArg>(u), std::forward<RightSingularVectorsArg>(vt));
