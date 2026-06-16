@@ -27,6 +27,9 @@ namespace cytnx::mdspan_concepts {
   template <class T>
   using real_element_t = typename detail::real_element<std::remove_cv_t<T>>::type;
 
+  template <class View>
+  using element_value_t = std::remove_cv_t<typename View::element_type>;
+
   template <class Accessor>
   struct is_host_accessor : std::false_type {};
 
@@ -64,6 +67,9 @@ namespace cytnx::mdspan_concepts {
   template <class View>
   concept CudaAccessible = MdspanView<View> && CudaAccessor<typename View::accessor_type>;
 
+  template <class View>
+  concept MutableView = MdspanView<View> && !std::is_const_v<typename View::element_type>;
+
   template <class View, std::size_t Rank>
   concept RankOf = MdspanView<View> && View::rank() == Rank;
 
@@ -88,12 +94,11 @@ namespace cytnx::mdspan_concepts {
   concept LayoutRightMatrix = Matrix<View> && LayoutRight<View>;
 
   template <class First, class... Rest>
-  concept SameElementType =
-    (... && std::same_as<typename First::element_type, typename Rest::element_type>);
+  concept SameElementType = (... && std::same_as<element_value_t<First>, element_value_t<Rest>>);
 
   template <class View>
   struct RealElementOf {
-    using element_type = real_element_t<typename View::element_type>;
+    using element_type = real_element_t<element_value_t<View>>;
   };
 
 }  // namespace cytnx::mdspan_concepts

@@ -231,6 +231,7 @@ namespace cytnx {
     class mdspan {
      public:
       using element_type = ElementType;
+      using value_type = std::remove_cv_t<ElementType>;
       using extents_type = Extents;
       using layout_type = LayoutPolicy;
       using accessor_type = AccessorPolicy;

@@ -33,12 +33,21 @@ namespace {
   static_assert(cytnx::lapack::ComplexLapackScalar<std::complex<float>>);
   static_assert(cytnx::lapack::ComplexLapackScalar<std::complex<double>>);
   static_assert(cytnx::lapack::LapackMatrix<matrix_view<double>>);
+  static_assert(cytnx::lapack::LapackMatrix<matrix_view<const double>>);
+  static_assert(cytnx::lapack::MutableLapackMatrix<matrix_view<double>>);
+  static_assert(!cytnx::lapack::MutableLapackMatrix<matrix_view<const double>>);
   static_assert(!cytnx::lapack::LapackMatrix<cuda_matrix_view<double>>);
   static_assert(cytnx::lapack::RealLapackMatrix<matrix_view<double>>);
+  static_assert(cytnx::lapack::RealLapackMatrix<matrix_view<const double>>);
   static_assert(cytnx::lapack::ComplexLapackMatrix<matrix_view<std::complex<double>>>);
   static_assert(cytnx::lapack::LapackVector<vector_view<float>>);
   static_assert(cytnx::lapack::RealLapackVector<vector_view<double>>);
+  static_assert(cytnx::lapack::RealLapackVector<vector_view<const double>>);
+  static_assert(cytnx::lapack::MutableRealLapackVector<vector_view<double>>);
+  static_assert(!cytnx::lapack::MutableRealLapackVector<vector_view<const double>>);
   static_assert(cytnx::lapack::ComplexLapackVector<vector_view<std::complex<float>>>);
+  static_assert(
+    cytnx::mdspan_concepts::SameElementType<matrix_view<const double>, matrix_view<double>>);
   static_assert(cytnx::mdspan_concepts::SameElementType<matrix_view<std::complex<double>>,
                                                         matrix_view<std::complex<double>>,
                                                         matrix_view<std::complex<double>>>);
@@ -495,8 +504,8 @@ namespace {
     std::vector<double> q(3 * 2);
     std::vector<double> r(2 * 2);
 
-    cytnx::lapack::qr(matrix_view<double>(a.data(), 3, 2), matrix_view<double>(q.data(), 3, 2),
-                      matrix_view<double>(r.data(), 2, 2));
+    cytnx::lapack::qr(matrix_view<const double>(a.data(), 3, 2),
+                      matrix_view<double>(q.data(), 3, 2), matrix_view<double>(r.data(), 2, 2));
 
     EXPECT_EQ(a, original);
     expect_qr_reconstructs(original, q, r, 3, 2, 1e-12);
@@ -510,7 +519,7 @@ namespace {
     std::vector<float> q(2 * 2);
     std::vector<float> r(2 * 3);
 
-    cytnx::qr(matrix_view<float>(a.data(), 2, 3), matrix_view<float>(q.data(), 2, 2),
+    cytnx::qr(matrix_view<const float>(a.data(), 2, 3), matrix_view<float>(q.data(), 2, 2),
               matrix_view<float>(r.data(), 2, 3));
 
     EXPECT_EQ(a, original);
@@ -525,8 +534,8 @@ namespace {
     std::vector<double> l(3 * 2);
     std::vector<double> q(2 * 2);
 
-    cytnx::lapack::lq(matrix_view<double>(a.data(), 3, 2), matrix_view<double>(l.data(), 3, 2),
-                      matrix_view<double>(q.data(), 2, 2));
+    cytnx::lapack::lq(matrix_view<const double>(a.data(), 3, 2),
+                      matrix_view<double>(l.data(), 3, 2), matrix_view<double>(q.data(), 2, 2));
 
     EXPECT_EQ(a, original);
     expect_lq_reconstructs(original, l, q, 3, 2, 1e-12);
@@ -540,7 +549,7 @@ namespace {
     std::vector<float> l(2 * 2);
     std::vector<float> q(2 * 3);
 
-    cytnx::lq(matrix_view<float>(a.data(), 2, 3), matrix_view<float>(l.data(), 2, 2),
+    cytnx::lq(matrix_view<const float>(a.data(), 2, 3), matrix_view<float>(l.data(), 2, 2),
               matrix_view<float>(q.data(), 2, 3));
 
     EXPECT_EQ(a, original);
