@@ -92,8 +92,7 @@ namespace cytnx {
 
   /// Variant-lifted overload of `svd_values`.
   template <class MatrixArg, class VectorArg>
-    requires(Variant<MatrixArg> || Variant<VectorArg>) &&
-            AnyDispatchInvocable<linalg_mdspan_detail::call_svd_values, MatrixArg, VectorArg>
+    requires AnyDispatchInvocable<linalg_mdspan_detail::call_svd_values, MatrixArg, VectorArg>
   void svd_values(MatrixArg &a, VectorArg &s) {
     tensor_t_detail::dispatch_visit(
       [](auto &matrix, auto &values) {
@@ -113,10 +112,8 @@ namespace cytnx {
   /// Variant-lifted overload of `svd`.
   template <class MatrixArg, class VectorArg, class LeftSingularVectorsArg,
             class RightSingularVectorsArg>
-    requires(Variant<MatrixArg> || Variant<VectorArg> || Variant<LeftSingularVectorsArg> ||
-             Variant<RightSingularVectorsArg>) &&
-            AnyDispatchInvocable<linalg_mdspan_detail::call_svd, MatrixArg, VectorArg,
-                                 LeftSingularVectorsArg, RightSingularVectorsArg>
+    requires AnyDispatchInvocable<linalg_mdspan_detail::call_svd, MatrixArg, VectorArg,
+                                  LeftSingularVectorsArg, RightSingularVectorsArg>
   void svd(MatrixArg &a, VectorArg &s, LeftSingularVectorsArg &u, RightSingularVectorsArg &vt) {
     tensor_t_detail::dispatch_visit(
       [](auto &matrix, auto &values, auto &left, auto &right) {
@@ -135,8 +132,8 @@ namespace cytnx {
 
   /// Variant-lifted overload of `self_adjoint_eigh`.
   template <class MatrixArg, class VectorArg>
-    requires(Variant<MatrixArg> || Variant<VectorArg>) &&
-            AnyDispatchInvocable<linalg_mdspan_detail::call_self_adjoint_eigh, MatrixArg, VectorArg>
+    requires AnyDispatchInvocable<linalg_mdspan_detail::call_self_adjoint_eigh, MatrixArg,
+                                  VectorArg>
   void self_adjoint_eigh(char jobz, char uplo, MatrixArg &a, VectorArg &w) {
     tensor_t_detail::dispatch_visit(
       [jobz, uplo](auto &matrix, auto &values) {

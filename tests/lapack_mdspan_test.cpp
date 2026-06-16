@@ -55,6 +55,7 @@ namespace {
   static_assert(
     cytnx::AnyDispatchInvocable<DispatchCallable, std::variant<DispatchC, DispatchA>, DispatchB>);
   static_assert(!cytnx::AnyDispatchInvocable<DispatchCallable, std::variant<DispatchC>, DispatchB>);
+  static_assert(!cytnx::AnyDispatchInvocable<DispatchCallable, DispatchA, DispatchB>);
 
   TEST(LapackMdspanTest, RowMajorSyevComputesEigenvalues) {
     std::vector<double> a = {
