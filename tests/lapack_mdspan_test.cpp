@@ -30,7 +30,8 @@ namespace {
                                                matrix_view<std::complex<double>>,
                                                matrix_view<std::complex<double>>>);
   static_assert(
-    cytnx::lapack::RealVectorFor<vector_view<double>, matrix_view<std::complex<double>>>);
+    cytnx::lapack::SameElementType<
+      vector_view<double>, cytnx::lapack::RealElementOf<matrix_view<std::complex<double>>>>);
 
   TEST(LapackMdspanTest, RowMajorSyevComputesEigenvalues) {
     std::vector<double> a = {
