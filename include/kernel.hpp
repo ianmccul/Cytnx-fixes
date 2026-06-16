@@ -3,8 +3,12 @@
 
 #include "cytnx_error.hpp"
 
+#include <sstream>
+#include <string>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <typeinfo>
 #include <utility>
 #include <variant>
 
@@ -74,6 +78,30 @@ namespace cytnx {
       run_kernel(std::forward<F>(f), std::forward<Args>(args)...);
     };
 
+    template <class Kernel>
+    constexpr std::string_view kernel_name() {
+      if constexpr (requires { std::remove_cvref_t<Kernel>::name; }) {
+        return std::remove_cvref_t<Kernel>::name;
+      } else {
+        return typeid(std::remove_cvref_t<Kernel>).name();
+      }
+    }
+
+    template <class Arg>
+    void append_argument_type(std::ostringstream &out, std::size_t index) {
+      out << "  arg" << index << ": " << typeid(std::remove_cvref_t<Arg>).name() << '\n';
+    }
+
+    template <class Kernel, class... Args>
+    std::string generic_kernel_error() {
+      std::ostringstream out;
+      out << "[ERROR] No matching backend kernel found for " << kernel_name<Kernel>() << ".\n";
+      out << "arguments:\n";
+      std::size_t index = 0;
+      (append_argument_type<Args>(out, index++), ...);
+      return out.str();
+    }
+
     template <class F, class... Accumulated>
     struct any_dispatch_invocable<F, std::tuple<Accumulated...>> {
       static constexpr bool value = kernel_invocable<F, Accumulated...>;
@@ -119,6 +147,17 @@ namespace cytnx {
   }  // namespace kernel_detail
 
   /**
+   * @brief Generic failure diagnostic for an active kernel dispatch combination.
+   *
+   * Backend kernels can overload this function beside their `run_kernel` overloads to provide
+   * operation-specific diagnostics. This fallback is used when no better overload is available.
+   */
+  template <class Kernel, class... Args>
+  std::string describe_kernel_error(Kernel &&, Args &&...) {
+    return kernel_detail::generic_kernel_error<Kernel, Args...>();
+  }
+
+  /**
    * @brief True if at least one Cartesian product of dispatch alternatives is invocable by `F`.
    *
    * Each argument type may be a concrete type or a `std::variant`; non-variants are treated as
@@ -133,18 +172,21 @@ namespace cytnx {
    * @brief Invoke a kernel over concrete or variant arguments.
    *
    * Concrete arguments are forwarded directly. Variant arguments are visited, and the active
-   * alternative combination must be invocable by `kernel`; otherwise `error_message` is reported.
+   * alternative combination must be invocable by `kernel`; otherwise a failure diagnostic is
+   * reported.
    */
   template <class Kernel, class... Args>
     requires AnyDispatchInvocable<Kernel, Args...>
-  decltype(auto) invoke_kernel(Kernel &&kernel, const char *error_message, Args &&...args) {
+  decltype(auto) invoke_kernel(Kernel &&kernel, Args &&...args) {
     return kernel_detail::dispatch_visit(
-      [&kernel, error_message](auto &&...active) -> decltype(auto) {
+      [&kernel](auto &&...active) -> decltype(auto) {
         if constexpr (kernel_detail::kernel_invocable<Kernel, decltype(active)...>) {
           return run_kernel(std::forward<Kernel>(kernel),
                             std::forward<decltype(active)>(active)...);
         } else {
-          cytnx_error_msg(true, "%s%s", error_message, "\n");
+          const std::string message = describe_kernel_error(
+            std::forward<Kernel>(kernel), std::forward<decltype(active)>(active)...);
+          cytnx_error_msg(true, "%s", message.c_str());
         }
       },
       std::forward<Args>(args)...);

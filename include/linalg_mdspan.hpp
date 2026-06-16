@@ -26,10 +26,8 @@ namespace cytnx {
   template <class MatrixArg, class VectorArg>
     requires AnyDispatchInvocable<linalg_mdspan_backend::svd_values_kernel, MatrixArg, VectorArg>
   void svd_values(MatrixArg &&a, VectorArg &&s) {
-    invoke_kernel(
-      linalg_mdspan_backend::svd_values_kernel{},
-      "[ERROR] svd_values variant alternatives have incompatible dtype, layout, rank, or backend.",
-      std::forward<MatrixArg>(a), std::forward<VectorArg>(s));
+    invoke_kernel(linalg_mdspan_backend::svd_values_kernel{}, std::forward<MatrixArg>(a),
+                  std::forward<VectorArg>(s));
   }
 
   /**
@@ -44,11 +42,9 @@ namespace cytnx {
     requires AnyDispatchInvocable<linalg_mdspan_backend::svd_kernel, MatrixArg, VectorArg,
                                   LeftSingularVectorsArg, RightSingularVectorsArg>
   void svd(MatrixArg &&a, VectorArg &&s, LeftSingularVectorsArg &&u, RightSingularVectorsArg &&vt) {
-    invoke_kernel(
-      linalg_mdspan_backend::svd_kernel{},
-      "[ERROR] svd variant alternatives have incompatible dtype, layout, rank, or backend.",
-      std::forward<MatrixArg>(a), std::forward<VectorArg>(s),
-      std::forward<LeftSingularVectorsArg>(u), std::forward<RightSingularVectorsArg>(vt));
+    invoke_kernel(linalg_mdspan_backend::svd_kernel{}, std::forward<MatrixArg>(a),
+                  std::forward<VectorArg>(s), std::forward<LeftSingularVectorsArg>(u),
+                  std::forward<RightSingularVectorsArg>(vt));
   }
 
   /**
@@ -62,11 +58,8 @@ namespace cytnx {
     requires AnyDispatchInvocable<linalg_mdspan_backend::self_adjoint_eigh_kernel, MatrixArg,
                                   VectorArg>
   void self_adjoint_eigh(char jobz, char uplo, MatrixArg &&a, VectorArg &&w) {
-    invoke_kernel(
-      linalg_mdspan_backend::self_adjoint_eigh_kernel{jobz, uplo},
-      "[ERROR] self_adjoint_eigh variant alternatives have incompatible dtype, layout, rank, or "
-      "backend.",
-      std::forward<MatrixArg>(a), std::forward<VectorArg>(w));
+    invoke_kernel(linalg_mdspan_backend::self_adjoint_eigh_kernel{jobz, uplo},
+                  std::forward<MatrixArg>(a), std::forward<VectorArg>(w));
   }
 
 }  // namespace cytnx

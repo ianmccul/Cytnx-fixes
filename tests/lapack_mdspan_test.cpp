@@ -7,6 +7,8 @@
 
 #include <cmath>
 #include <complex>
+#include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -48,9 +50,13 @@ namespace {
   struct DispatchC {};
 
   struct DispatchKernel {};
+  struct NamedDispatchKernel {
+    static constexpr std::string_view name = "dispatch_test";
+  };
   struct DispatchRvalueKernel {};
 
   void run_kernel(DispatchKernel, DispatchA &, DispatchB &) {}
+  void run_kernel(NamedDispatchKernel, DispatchA &, DispatchB &) {}
   void run_kernel(DispatchRvalueKernel, DispatchA &&) {}
 
   static_assert(cytnx::Variant<std::variant<DispatchA, DispatchC>>);
@@ -64,6 +70,23 @@ namespace {
     cytnx::AnyDispatchInvocable<DispatchRvalueKernel, std::variant<DispatchC, DispatchA>>);
   static_assert(
     !cytnx::AnyDispatchInvocable<DispatchRvalueKernel, std::variant<DispatchC, DispatchA> &>);
+
+  TEST(LapackMdspanTest, InvokeKernelReportsActiveAlternativeFailure) {
+    std::variant<DispatchC, DispatchA> active_bad = DispatchC{};
+    DispatchB second;
+
+    try {
+      cytnx::invoke_kernel(NamedDispatchKernel{}, active_bad, second);
+      FAIL() << "Expected invoke_kernel to reject the active variant alternative.";
+    } catch (const std::logic_error &err) {
+      const std::string message = err.what();
+      EXPECT_NE(message.find("No matching backend kernel found for dispatch_test"),
+                std::string::npos);
+      EXPECT_NE(message.find("arguments:"), std::string::npos);
+      EXPECT_NE(message.find("arg0:"), std::string::npos);
+      EXPECT_NE(message.find("arg1:"), std::string::npos);
+    }
+  }
 
   TEST(LapackMdspanTest, RowMajorSyevComputesEigenvalues) {
     std::vector<double> a = {

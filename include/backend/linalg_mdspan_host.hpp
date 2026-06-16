@@ -3,15 +3,22 @@
 
 #include "backend/lapack_mdspan.hpp"
 
+#include <string_view>
+
 #ifndef BACKEND_TORCH
 
 namespace cytnx::linalg_mdspan_backend {
 
-  struct svd_values_kernel {};
+  struct svd_values_kernel {
+    static constexpr std::string_view name = "svd_values";
+  };
 
-  struct svd_kernel {};
+  struct svd_kernel {
+    static constexpr std::string_view name = "svd";
+  };
 
   struct self_adjoint_eigh_kernel {
+    static constexpr std::string_view name = "self_adjoint_eigh";
     char jobz = 'N';
     char uplo = 'U';
   };
