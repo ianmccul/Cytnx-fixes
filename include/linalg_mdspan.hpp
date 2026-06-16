@@ -5,9 +5,7 @@
 #include "TensorT_traits.hpp"
 #include "backend/lapack_mdspan.hpp"
 #include "cytnx_error.hpp"
-#include "mdspan_concepts.hpp"
 
-#include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <type_traits>
@@ -19,57 +17,27 @@ namespace cytnx {
 
   namespace linalg_mdspan_detail {
 
-    template <class View, class = void>
-    struct access_policy {
-      using type = host_access;
+    template <class View>
+    struct is_tensor_t : std::false_type {};
+
+    template <class T, std::size_t Rank, class Access, class Layout>
+    struct is_tensor_t<TensorT<T, Rank, Access, Layout>> : std::true_type {};
+
+    template <class View>
+    concept TensorTView = is_tensor_t<std::remove_cvref_t<View>>::value;
+
+    template <class View>
+    struct tensor_t_access;
+
+    template <class T, std::size_t Rank, class Access, class Layout>
+    struct tensor_t_access<TensorT<T, Rank, Access, Layout>> {
+      using type = Access;
     };
 
     template <class View>
-    struct access_policy<View, std::void_t<typename View::access_type>> {
-      using type = typename View::access_type;
-    };
-
-    template <class View>
-    concept HostView = std::same_as<typename access_policy<View>::type, host_access>;
-
-    template <class T>
-    bool is_finite_scalar(const T &value) {
-      if constexpr (lapack::ComplexLapackScalar<T>) {
-        return std::isfinite(value.real()) && std::isfinite(value.imag());
-      } else {
-        return std::isfinite(value);
-      }
-    }
-
-    template <mdspan_concepts::MdspanView View>
-    std::size_t nonfinite_count(View view) {
-      static_assert(View::rank() == 1 || View::rank() == 2,
-                    "linear algebra diagnostics support vector and matrix views");
-      std::size_t count = 0;
-      if constexpr (View::rank() == 1) {
-        for (std::size_t i = 0; i < view.extent(0); ++i) {
-          if (!is_finite_scalar(view(i))) ++count;
-        }
-      } else {
-        for (std::size_t i = 0; i < view.extent(0); ++i) {
-          for (std::size_t j = 0; j < view.extent(1); ++j) {
-            if (!is_finite_scalar(view(i, j))) ++count;
-          }
-        }
-      }
-      return count;
-    }
-
-    template <mdspan_concepts::MdspanView... Views>
-    void check_lapack_info(const char *routine, int info, Views... views) {
-      if (info == 0) return;
-      const std::size_t count = (std::size_t{0} + ... + nonfinite_count(views));
-      cytnx_error_msg(
-        true,
-        "[ERROR] LAPACK %s failed with info = %d. Post-call diagnostic found %llu NaN/Inf "
-        "entries in checked arrays.%s",
-        routine, info, static_cast<unsigned long long>(count), "\n");
-    }
+    concept HostTensorTView =
+      TensorTView<View> &&
+      std::same_as<typename tensor_t_access<std::remove_cvref_t<View>>::type, host_access>;
 
     template <class T>
     struct is_variant : std::false_type {};
@@ -81,36 +49,36 @@ namespace cytnx {
     concept Variant = is_variant<std::remove_cvref_t<T>>::value;
 
     template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-      requires HostView<Matrix> && HostView<Vector> &&
+      requires HostTensorTView<Matrix> && HostTensorTView<Vector> &&
                lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>>
     void svd_values_impl(Matrix a, Vector s) {
-      check_lapack_info("gesvd", lapack::gesvd(a, s), a, s);
+      lapack::svd_values(a, s);
     }
 
     template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector,
               lapack::LapackMatrix LeftSingularVectors, lapack::LapackMatrix RightSingularVectors>
-      requires HostView<Matrix> && HostView<Vector> && HostView<LeftSingularVectors> &&
-               HostView<RightSingularVectors> &&
+      requires HostTensorTView<Matrix> && HostTensorTView<Vector> &&
+               HostTensorTView<LeftSingularVectors> && HostTensorTView<RightSingularVectors> &&
                lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>> &&
                lapack::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
     void svd_impl(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
-      check_lapack_info("gesvd", lapack::gesvd(a, s, u, vt), a, s, u, vt);
+      lapack::svd(a, s, u, vt);
     }
 
     template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-      requires HostView<Matrix> && HostView<Vector> &&
+      requires HostTensorTView<Matrix> && HostTensorTView<Vector> &&
                lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>>
     void self_adjoint_eigh_impl(char jobz, char uplo, Matrix a, Vector w) {
-      check_lapack_info("eigh", lapack::eigh(jobz, uplo, a, w), a, w);
+      lapack::self_adjoint_eigh(jobz, uplo, a, w);
     }
 
   }  // namespace linalg_mdspan_detail
 
   /**
-   * @brief Compute singular values of a host layout-right matrix view.
+   * @brief Compute singular values of a host layout-right TensorT matrix view.
    *
-   * This is the checked, algorithm-facing wrapper. The lower LAPACK backend returns `info`; this
-   * function treats nonzero `info` as unrecoverable and emits diagnostics before throwing.
+   * This is the TensorT-facing dispatch layer. Host TensorT views call the checked LAPACK backend;
+   * CUDA overloads can be added here without exposing CUDA details to callers.
    */
   template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
     requires requires(Matrix a, Vector s) { linalg_mdspan_detail::svd_values_impl(a, s); }
@@ -137,10 +105,11 @@ namespace cytnx {
   }
 
   /**
-   * @brief Compute the thin singular value decomposition of a host layout-right matrix view.
+   * @brief Compute the thin singular value decomposition of a host layout-right TensorT matrix
+   * view.
    *
-   * `a` is overwritten by the backend. The output views must have shapes compatible with the thin
-   * SVD: `s(min(m,n))`, `u(m,min(m,n))`, and `vt(min(m,n),n)` in logical row-major order.
+   * `a` is overwritten by the backend. Host TensorT views call the checked LAPACK backend; CUDA
+   * overloads can be added here with the same contract.
    */
   template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector,
             lapack::LapackMatrix LeftSingularVectors, lapack::LapackMatrix RightSingularVectors>
@@ -173,7 +142,7 @@ namespace cytnx {
   }
 
   /**
-   * @brief Diagonalize a real symmetric or complex Hermitian host layout-right matrix view.
+   * @brief Diagonalize a real symmetric or complex Hermitian host layout-right TensorT matrix view.
    *
    * The wrapper uses row-major logical indexing and translates the triangular `uplo` selector for
    * the column-major LAPACK backend.

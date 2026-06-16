@@ -45,8 +45,8 @@ namespace {
     };
     std::vector<double> w(2);
 
-    const int info = cytnx::lapack::eigh('N', 'U', matrix_view<double>(a.data(), 2, 2),
-                                         vector_view<double>(w.data(), 2));
+    const int info = cytnx::lapack::lowlevel::eigh('N', 'U', matrix_view<double>(a.data(), 2, 2),
+                                                   vector_view<double>(w.data(), 2));
 
     ASSERT_EQ(info, 0);
     EXPECT_NEAR(w[0], 1.0, 1e-12);
@@ -62,8 +62,8 @@ namespace {
     };
     std::vector<float> w(2);
 
-    const int info = cytnx::lapack::eigh('N', 'U', matrix_view<float>(a.data(), 2, 2),
-                                         vector_view<float>(w.data(), 2));
+    const int info = cytnx::lapack::lowlevel::eigh('N', 'U', matrix_view<float>(a.data(), 2, 2),
+                                                   vector_view<float>(w.data(), 2));
 
     ASSERT_EQ(info, 0);
     EXPECT_NEAR(w[0], 2.0F, 1e-5F);
@@ -80,8 +80,8 @@ namespace {
     };
     std::vector<double> w(2);
 
-    const int info = cytnx::lapack::eigh('N', 'U', matrix_view<complex>(a.data(), 2, 2),
-                                         vector_view<double>(w.data(), 2));
+    const int info = cytnx::lapack::lowlevel::eigh('N', 'U', matrix_view<complex>(a.data(), 2, 2),
+                                                   vector_view<double>(w.data(), 2));
 
     ASSERT_EQ(info, 0);
     EXPECT_NEAR(w[0], 1.0, 1e-12);
@@ -94,8 +94,8 @@ namespace {
     };
     std::vector<double> s(2);
 
-    const int info =
-      cytnx::lapack::gesvd(matrix_view<double>(a.data(), 2, 3), vector_view<double>(s.data(), 2));
+    const int info = cytnx::lapack::lowlevel::gesvd(matrix_view<double>(a.data(), 2, 3),
+                                                    vector_view<double>(s.data(), 2));
 
     ASSERT_EQ(info, 0);
     EXPECT_NEAR(s[0], 4.0, 1e-12);
@@ -112,8 +112,8 @@ namespace {
     };
     std::vector<float> s(2);
 
-    const int info =
-      cytnx::lapack::gesvd(matrix_view<complex>(a.data(), 2, 2), vector_view<float>(s.data(), 2));
+    const int info = cytnx::lapack::lowlevel::gesvd(matrix_view<complex>(a.data(), 2, 2),
+                                                    vector_view<float>(s.data(), 2));
 
     ASSERT_EQ(info, 0);
     EXPECT_NEAR(s[0], 4.0F, 1e-5F);
@@ -129,8 +129,8 @@ namespace {
     std::vector<double> u(2 * 2);
     std::vector<double> vt(2 * 3);
 
-    cytnx::svd(matrix_view<double>(a.data(), 2, 3), vector_view<double>(s.data(), 2),
-               matrix_view<double>(u.data(), 2, 2), matrix_view<double>(vt.data(), 2, 3));
+    cytnx::lapack::svd(matrix_view<double>(a.data(), 2, 3), vector_view<double>(s.data(), 2),
+                       matrix_view<double>(u.data(), 2, 2), matrix_view<double>(vt.data(), 2, 3));
 
     for (std::size_t i = 0; i < 2; ++i) {
       for (std::size_t j = 0; j < 3; ++j) {
@@ -149,7 +149,8 @@ namespace {
     };
     std::vector<double> s(2);
 
-    cytnx::svd_values(matrix_view<double>(a.data(), 2, 3), vector_view<double>(s.data(), 2));
+    cytnx::lapack::svd_values(matrix_view<double>(a.data(), 2, 3),
+                              vector_view<double>(s.data(), 2));
 
     EXPECT_NEAR(s[0], 4.0, 1e-12);
     EXPECT_NEAR(s[1], 3.0, 1e-12);
@@ -164,8 +165,8 @@ namespace {
     };
     std::vector<double> w(2);
 
-    cytnx::self_adjoint_eigh('N', 'U', matrix_view<double>(a.data(), 2, 2),
-                             vector_view<double>(w.data(), 2));
+    cytnx::lapack::self_adjoint_eigh('N', 'U', matrix_view<double>(a.data(), 2, 2),
+                                     vector_view<double>(w.data(), 2));
 
     EXPECT_NEAR(w[0], 1.0, 1e-12);
     EXPECT_NEAR(w[1], 3.0, 1e-12);

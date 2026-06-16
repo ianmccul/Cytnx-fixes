@@ -7,6 +7,7 @@
 #include "mdspan_concepts.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <concepts>
 #include <complex>
 #include <limits>
@@ -14,6 +15,10 @@
 #include <vector>
 
 #ifndef BACKEND_TORCH
+
+namespace cytnx {
+  struct host_access;
+}
 
 namespace cytnx::lapack::fortran {
 
@@ -80,6 +85,20 @@ namespace cytnx::lapack {
       return uplo;
     }
 
+    template <class View, class = void>
+    struct access_policy {
+      using type = void;
+    };
+
+    template <class View>
+    struct access_policy<View, std::void_t<typename View::access_type>> {
+      using type = typename View::access_type;
+    };
+
+    template <class View>
+    concept HostAccessible = std::same_as<typename access_policy<View>::type, void> ||
+                             std::same_as<typename access_policy<View>::type, host_access>;
+
   }  // namespace detail
 
   template <class T>
@@ -124,202 +143,292 @@ namespace cytnx::lapack {
     using element_type = detail::real_scalar_t<typename View::element_type>;
   };
 
-  namespace native {
+  namespace lowlevel {
 
-    inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
-                      float *a, const blas_int *lda, float *s, float *u, const blas_int *ldu,
-                      float *vt, const blas_int *ldvt, float *work, const blas_int *lwork,
-                      blas_int *info) {
-      fortran::sgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
+    namespace native {
+
+      inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
+                        float *a, const blas_int *lda, float *s, float *u, const blas_int *ldu,
+                        float *vt, const blas_int *ldvt, float *work, const blas_int *lwork,
+                        blas_int *info) {
+        fortran::sgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
+      }
+
+      inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
+                        double *a, const blas_int *lda, double *s, double *u, const blas_int *ldu,
+                        double *vt, const blas_int *ldvt, double *work, const blas_int *lwork,
+                        blas_int *info) {
+        fortran::dgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
+      }
+
+      inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
+                        std::complex<float> *a, const blas_int *lda, float *s,
+                        std::complex<float> *u, const blas_int *ldu, std::complex<float> *vt,
+                        const blas_int *ldvt, std::complex<float> *work, const blas_int *lwork,
+                        float *rwork, blas_int *info) {
+        fortran::cgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, info);
+      }
+
+      inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
+                        std::complex<double> *a, const blas_int *lda, double *s,
+                        std::complex<double> *u, const blas_int *ldu, std::complex<double> *vt,
+                        const blas_int *ldvt, std::complex<double> *work, const blas_int *lwork,
+                        double *rwork, blas_int *info) {
+        fortran::zgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, info);
+      }
+
+      inline void syev(const char *jobz, const char *uplo, const blas_int *n, float *a,
+                       const blas_int *lda, float *w, float *work, const blas_int *lwork,
+                       blas_int *info) {
+        fortran::ssyev_(jobz, uplo, n, a, lda, w, work, lwork, info);
+      }
+
+      inline void syev(const char *jobz, const char *uplo, const blas_int *n, double *a,
+                       const blas_int *lda, double *w, double *work, const blas_int *lwork,
+                       blas_int *info) {
+        fortran::dsyev_(jobz, uplo, n, a, lda, w, work, lwork, info);
+      }
+
+      inline void heev(const char *jobz, const char *uplo, const blas_int *n,
+                       std::complex<float> *a, const blas_int *lda, float *w,
+                       std::complex<float> *work, const blas_int *lwork, float *rwork,
+                       blas_int *info) {
+        fortran::cheev_(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
+      }
+
+      inline void heev(const char *jobz, const char *uplo, const blas_int *n,
+                       std::complex<double> *a, const blas_int *lda, double *w,
+                       std::complex<double> *work, const blas_int *lwork, double *rwork,
+                       blas_int *info) {
+        fortran::zheev_(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
+      }
+
+    }  // namespace native
+
+    template <LapackMatrix Matrix, RealLapackVector Vector>
+      requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
+               SameElementType<Vector, RealElementOf<Matrix>>
+    int gesvd(Matrix a, Vector s) {
+      using scalar_type = typename Matrix::element_type;
+      using real_type = detail::real_scalar_t<scalar_type>;
+
+      const auto rows = a.extent(0);
+      const auto cols = a.extent(1);
+      const auto min_dim = std::min(rows, cols);
+      cytnx_error_msg(s.extent(0) < min_dim,
+                      "[ERROR] LAPACK gesvd singular-value output is too small.%s", "\n");
+
+      const blas_int native_m = detail::to_blas_int(cols, "cols");
+      const blas_int native_n = detail::to_blas_int(rows, "rows");
+      const blas_int lda = std::max<blas_int>(1, native_m);
+      const blas_int one = 1;
+      blas_int info = 0;
+      blas_int lwork = -1;
+
+      if constexpr (RealLapackScalar<scalar_type>) {
+        scalar_type work_query{};
+        native::gesvd("N", "N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      nullptr, &one, nullptr, &one, &work_query, &lwork, &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::gesvd("N", "N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      nullptr, &one, nullptr, &one, work.data(), &lwork, &info);
+      } else {
+        scalar_type work_query{};
+        const std::size_t rwork_size = std::max<std::size_t>(1, 5 * min_dim);
+        std::vector<real_type> rwork(rwork_size);
+        native::gesvd("N", "N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      nullptr, &one, nullptr, &one, &work_query, &lwork, rwork.data(), &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::gesvd("N", "N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      nullptr, &one, nullptr, &one, work.data(), &lwork, rwork.data(), &info);
+      }
+
+      return info;
     }
 
-    inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
-                      double *a, const blas_int *lda, double *s, double *u, const blas_int *ldu,
-                      double *vt, const blas_int *ldvt, double *work, const blas_int *lwork,
-                      blas_int *info) {
-      fortran::dgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
+    template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
+              LapackMatrix RightSingularVectors>
+      requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
+               detail::HostAccessible<LeftSingularVectors> &&
+               detail::HostAccessible<RightSingularVectors> &&
+               SameElementType<Vector, RealElementOf<Matrix>> &&
+               SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
+    int gesvd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
+      using scalar_type = typename Matrix::element_type;
+      using real_type = detail::real_scalar_t<scalar_type>;
+
+      const auto rows = a.extent(0);
+      const auto cols = a.extent(1);
+      const auto min_dim = std::min(rows, cols);
+      cytnx_error_msg(s.extent(0) < min_dim,
+                      "[ERROR] LAPACK gesvd singular-value output is too small.%s", "\n");
+      cytnx_error_msg(u.extent(0) < rows || u.extent(1) < min_dim,
+                      "[ERROR] LAPACK gesvd U output has incompatible shape.%s", "\n");
+      cytnx_error_msg(vt.extent(0) < min_dim || vt.extent(1) < cols,
+                      "[ERROR] LAPACK gesvd VT output has incompatible shape.%s", "\n");
+
+      const blas_int native_m = detail::to_blas_int(cols, "cols");
+      const blas_int native_n = detail::to_blas_int(rows, "rows");
+      const blas_int lda = std::max<blas_int>(1, native_m);
+      const blas_int native_ldu = std::max<blas_int>(1, native_m);
+      const blas_int native_ldvt = std::max<blas_int>(1, detail::to_blas_int(min_dim, "min_dim"));
+      blas_int info = 0;
+      blas_int lwork = -1;
+
+      if constexpr (RealLapackScalar<scalar_type>) {
+        scalar_type work_query{};
+        native::gesvd("S", "S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, &work_query,
+                      &lwork, &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::gesvd("S", "S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, work.data(),
+                      &lwork, &info);
+      } else {
+        scalar_type work_query{};
+        const std::size_t rwork_size = std::max<std::size_t>(1, 5 * min_dim);
+        std::vector<real_type> rwork(rwork_size);
+        native::gesvd("S", "S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, &work_query,
+                      &lwork, rwork.data(), &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::gesvd("S", "S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, work.data(),
+                      &lwork, rwork.data(), &info);
+      }
+
+      return info;
     }
 
-    inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
-                      std::complex<float> *a, const blas_int *lda, float *s, std::complex<float> *u,
-                      const blas_int *ldu, std::complex<float> *vt, const blas_int *ldvt,
-                      std::complex<float> *work, const blas_int *lwork, float *rwork,
-                      blas_int *info) {
-      fortran::cgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, info);
+    template <LapackMatrix Matrix, RealLapackVector Vector>
+      requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
+               SameElementType<Vector, RealElementOf<Matrix>>
+    int eigh(char jobz, char uplo, Matrix a, Vector w) {
+      using scalar_type = typename Matrix::element_type;
+      using real_type = detail::real_scalar_t<scalar_type>;
+
+      const auto n = a.extent(0);
+      cytnx_error_msg(a.extent(1) != n, "[ERROR] LAPACK eigh input must be square.%s", "\n");
+      cytnx_error_msg(w.extent(0) < n, "[ERROR] LAPACK eigh eigenvalue output is too small.%s",
+                      "\n");
+
+      const blas_int native_n = detail::to_blas_int(n, "n");
+      const blas_int lda = std::max<blas_int>(1, native_n);
+      const char native_uplo = detail::transpose_uplo(uplo);
+      blas_int info = 0;
+      blas_int lwork = -1;
+
+      if constexpr (RealLapackScalar<scalar_type>) {
+        scalar_type work_query{};
+        native::syev(&jobz, &native_uplo, &native_n, a.data_handle(), &lda, w.data_handle(),
+                     &work_query, &lwork, &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::syev(&jobz, &native_uplo, &native_n, a.data_handle(), &lda, w.data_handle(),
+                     work.data(), &lwork, &info);
+      } else {
+        scalar_type work_query{};
+        const std::size_t rwork_size = std::max<std::size_t>(1, n > 0 ? 3 * n - 2 : 0);
+        std::vector<real_type> rwork(rwork_size);
+        native::heev(&jobz, &native_uplo, &native_n, a.data_handle(), &lda, w.data_handle(),
+                     &work_query, &lwork, rwork.data(), &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::heev(&jobz, &native_uplo, &native_n, a.data_handle(), &lda, w.data_handle(),
+                     work.data(), &lwork, rwork.data(), &info);
+      }
+
+      return info;
     }
 
-    inline void gesvd(const char *jobu, const char *jobvt, const blas_int *m, const blas_int *n,
-                      std::complex<double> *a, const blas_int *lda, double *s,
-                      std::complex<double> *u, const blas_int *ldu, std::complex<double> *vt,
-                      const blas_int *ldvt, std::complex<double> *work, const blas_int *lwork,
-                      double *rwork, blas_int *info) {
-      fortran::zgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, info);
+  }  // namespace lowlevel
+
+  namespace detail {
+
+    template <class T>
+    bool is_finite_scalar(const T &value) {
+      if constexpr (ComplexLapackScalar<T>) {
+        return std::isfinite(value.real()) && std::isfinite(value.imag());
+      } else {
+        return std::isfinite(value);
+      }
     }
 
-    inline void syev(const char *jobz, const char *uplo, const blas_int *n, float *a,
-                     const blas_int *lda, float *w, float *work, const blas_int *lwork,
-                     blas_int *info) {
-      fortran::ssyev_(jobz, uplo, n, a, lda, w, work, lwork, info);
+    template <mdspan_concepts::MdspanView View>
+    std::size_t nonfinite_count(View view) {
+      static_assert(View::rank() == 1 || View::rank() == 2,
+                    "LAPACK diagnostics support vector and matrix views");
+      std::size_t count = 0;
+      if constexpr (View::rank() == 1) {
+        for (std::size_t i = 0; i < view.extent(0); ++i) {
+          if (!is_finite_scalar(view(i))) ++count;
+        }
+      } else {
+        for (std::size_t i = 0; i < view.extent(0); ++i) {
+          for (std::size_t j = 0; j < view.extent(1); ++j) {
+            if (!is_finite_scalar(view(i, j))) ++count;
+          }
+        }
+      }
+      return count;
     }
 
-    inline void syev(const char *jobz, const char *uplo, const blas_int *n, double *a,
-                     const blas_int *lda, double *w, double *work, const blas_int *lwork,
-                     blas_int *info) {
-      fortran::dsyev_(jobz, uplo, n, a, lda, w, work, lwork, info);
+    template <mdspan_concepts::MdspanView... Views>
+    void check_lapack_info(const char *routine, int info, Views... views) {
+      if (info == 0) return;
+      const std::size_t count = (std::size_t{0} + ... + nonfinite_count(views));
+      cytnx_error_msg(
+        true,
+        "[ERROR] LAPACK %s failed with info = %d. Post-call diagnostic found %llu NaN/Inf "
+        "entries in checked arrays.%s",
+        routine, info, static_cast<unsigned long long>(count), "\n");
     }
 
-    inline void heev(const char *jobz, const char *uplo, const blas_int *n, std::complex<float> *a,
-                     const blas_int *lda, float *w, std::complex<float> *work,
-                     const blas_int *lwork, float *rwork, blas_int *info) {
-      fortran::cheev_(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
-    }
+  }  // namespace detail
 
-    inline void heev(const char *jobz, const char *uplo, const blas_int *n, std::complex<double> *a,
-                     const blas_int *lda, double *w, std::complex<double> *work,
-                     const blas_int *lwork, double *rwork, blas_int *info) {
-      fortran::zheev_(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
-    }
-
-  }  // namespace native
-
+  /**
+   * @brief Compute singular values with checked host LAPACK diagnostics.
+   */
   template <LapackMatrix Matrix, RealLapackVector Vector>
-    requires SameElementType<Vector, RealElementOf<Matrix>>
-  int gesvd(Matrix a, Vector s) {
-    using scalar_type = typename Matrix::element_type;
-    using real_type = detail::real_scalar_t<scalar_type>;
-
-    const auto rows = a.extent(0);
-    const auto cols = a.extent(1);
-    const auto min_dim = std::min(rows, cols);
-    cytnx_error_msg(s.extent(0) < min_dim,
-                    "[ERROR] LAPACK gesvd singular-value output is too small.%s", "\n");
-
-    const blas_int native_m = detail::to_blas_int(cols, "cols");
-    const blas_int native_n = detail::to_blas_int(rows, "rows");
-    const blas_int lda = std::max<blas_int>(1, native_m);
-    const blas_int one = 1;
-    blas_int info = 0;
-    blas_int lwork = -1;
-
-    if constexpr (RealLapackScalar<scalar_type>) {
-      scalar_type work_query{};
-      native::gesvd("N", "N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(), nullptr,
-                    &one, nullptr, &one, &work_query, &lwork, &info);
-      if (info != 0) return info;
-      lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
-      std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
-      native::gesvd("N", "N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(), nullptr,
-                    &one, nullptr, &one, work.data(), &lwork, &info);
-    } else {
-      scalar_type work_query{};
-      const std::size_t rwork_size = std::max<std::size_t>(1, 5 * min_dim);
-      std::vector<real_type> rwork(rwork_size);
-      native::gesvd("N", "N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(), nullptr,
-                    &one, nullptr, &one, &work_query, &lwork, rwork.data(), &info);
-      if (info != 0) return info;
-      lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
-      std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
-      native::gesvd("N", "N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(), nullptr,
-                    &one, nullptr, &one, work.data(), &lwork, rwork.data(), &info);
-    }
-
-    return info;
+    requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
+             SameElementType<Vector, RealElementOf<Matrix>>
+  void svd_values(Matrix a, Vector s) {
+    detail::check_lapack_info("gesvd", lowlevel::gesvd(a, s), a, s);
   }
 
+  /**
+   * @brief Compute a thin singular value decomposition with checked host LAPACK diagnostics.
+   */
   template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
             LapackMatrix RightSingularVectors>
-    requires SameElementType<Vector, RealElementOf<Matrix>> &&
+    requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
+             detail::HostAccessible<LeftSingularVectors> &&
+             detail::HostAccessible<RightSingularVectors> &&
+             SameElementType<Vector, RealElementOf<Matrix>> &&
              SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
-  int gesvd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
-    using scalar_type = typename Matrix::element_type;
-    using real_type = detail::real_scalar_t<scalar_type>;
-
-    const auto rows = a.extent(0);
-    const auto cols = a.extent(1);
-    const auto min_dim = std::min(rows, cols);
-    cytnx_error_msg(s.extent(0) < min_dim,
-                    "[ERROR] LAPACK gesvd singular-value output is too small.%s", "\n");
-    cytnx_error_msg(u.extent(0) < rows || u.extent(1) < min_dim,
-                    "[ERROR] LAPACK gesvd U output has incompatible shape.%s", "\n");
-    cytnx_error_msg(vt.extent(0) < min_dim || vt.extent(1) < cols,
-                    "[ERROR] LAPACK gesvd VT output has incompatible shape.%s", "\n");
-
-    const blas_int native_m = detail::to_blas_int(cols, "cols");
-    const blas_int native_n = detail::to_blas_int(rows, "rows");
-    const blas_int lda = std::max<blas_int>(1, native_m);
-    const blas_int native_ldu = std::max<blas_int>(1, native_m);
-    const blas_int native_ldvt = std::max<blas_int>(1, detail::to_blas_int(min_dim, "min_dim"));
-    blas_int info = 0;
-    blas_int lwork = -1;
-
-    if constexpr (RealLapackScalar<scalar_type>) {
-      scalar_type work_query{};
-      native::gesvd("S", "S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
-                    vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, &work_query,
-                    &lwork, &info);
-      if (info != 0) return info;
-      lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
-      std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
-      native::gesvd("S", "S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
-                    vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, work.data(),
-                    &lwork, &info);
-    } else {
-      scalar_type work_query{};
-      const std::size_t rwork_size = std::max<std::size_t>(1, 5 * min_dim);
-      std::vector<real_type> rwork(rwork_size);
-      native::gesvd("S", "S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
-                    vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, &work_query,
-                    &lwork, rwork.data(), &info);
-      if (info != 0) return info;
-      lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
-      std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
-      native::gesvd("S", "S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
-                    vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, work.data(),
-                    &lwork, rwork.data(), &info);
-    }
-
-    return info;
+  void svd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
+    detail::check_lapack_info("gesvd", lowlevel::gesvd(a, s, u, vt), a, s, u, vt);
   }
 
+  /**
+   * @brief Diagonalize a real symmetric or complex Hermitian matrix with checked host LAPACK
+   * diagnostics.
+   */
   template <LapackMatrix Matrix, RealLapackVector Vector>
-    requires SameElementType<Vector, RealElementOf<Matrix>>
-  int eigh(char jobz, char uplo, Matrix a, Vector w) {
-    using scalar_type = typename Matrix::element_type;
-    using real_type = detail::real_scalar_t<scalar_type>;
-
-    const auto n = a.extent(0);
-    cytnx_error_msg(a.extent(1) != n, "[ERROR] LAPACK eigh input must be square.%s", "\n");
-    cytnx_error_msg(w.extent(0) < n, "[ERROR] LAPACK eigh eigenvalue output is too small.%s", "\n");
-
-    const blas_int native_n = detail::to_blas_int(n, "n");
-    const blas_int lda = std::max<blas_int>(1, native_n);
-    const char native_uplo = detail::transpose_uplo(uplo);
-    blas_int info = 0;
-    blas_int lwork = -1;
-
-    if constexpr (RealLapackScalar<scalar_type>) {
-      scalar_type work_query{};
-      native::syev(&jobz, &native_uplo, &native_n, a.data_handle(), &lda, w.data_handle(),
-                   &work_query, &lwork, &info);
-      if (info != 0) return info;
-      lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
-      std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
-      native::syev(&jobz, &native_uplo, &native_n, a.data_handle(), &lda, w.data_handle(),
-                   work.data(), &lwork, &info);
-    } else {
-      scalar_type work_query{};
-      const std::size_t rwork_size = std::max<std::size_t>(1, n > 0 ? 3 * n - 2 : 0);
-      std::vector<real_type> rwork(rwork_size);
-      native::heev(&jobz, &native_uplo, &native_n, a.data_handle(), &lda, w.data_handle(),
-                   &work_query, &lwork, rwork.data(), &info);
-      if (info != 0) return info;
-      lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
-      std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
-      native::heev(&jobz, &native_uplo, &native_n, a.data_handle(), &lda, w.data_handle(),
-                   work.data(), &lwork, rwork.data(), &info);
-    }
-
-    return info;
+    requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
+             SameElementType<Vector, RealElementOf<Matrix>>
+  void self_adjoint_eigh(char jobz, char uplo, Matrix a, Vector w) {
+    detail::check_lapack_info("eigh", lowlevel::eigh(jobz, uplo, a, w), a, w);
   }
 
 }  // namespace cytnx::lapack
