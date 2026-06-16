@@ -175,6 +175,35 @@ namespace cytnx {
   concept AnyDispatchInvocable = tensor_t_detail::any_dispatch_invocable<
     F, std::tuple<>, tensor_t_detail::dispatch_alternatives_t<Args>...>::value;
 
+  /**
+   * @brief Invoke a kernel over concrete or variant arguments.
+   *
+   * Concrete arguments are forwarded directly. Variant arguments are visited, and the active
+   * alternative combination must be invocable by `kernel`; otherwise `error_message` is reported.
+   */
+  template <class Kernel, class... Args>
+    requires AnyDispatchInvocable<Kernel, Args...>
+  decltype(auto) invoke_kernel(Kernel &&kernel, const char *error_message, Args &&...args) {
+    return tensor_t_detail::dispatch_visit(
+      [&kernel, error_message](auto &&...active) -> decltype(auto) {
+        if constexpr (std::is_invocable_v<Kernel, decltype(active)...>) {
+          return std::forward<Kernel>(kernel)(std::forward<decltype(active)>(active)...);
+        } else {
+          cytnx_error_msg(true, "%s%s", error_message, "\n");
+        }
+      },
+      std::forward<Args>(args)...);
+  }
+
+  /**
+   * @brief Invoke a default-constructible kernel over concrete or variant arguments.
+   */
+  template <class Kernel, class... Args>
+    requires AnyDispatchInvocable<Kernel, Args...>
+  decltype(auto) invoke_kernel(const char *error_message, Args &&...args) {
+    return invoke_kernel(Kernel{}, error_message, std::forward<Args>(args)...);
+  }
+
   namespace tensor_t_detail {
 
     template <class T>

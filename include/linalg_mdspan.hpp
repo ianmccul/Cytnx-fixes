@@ -42,22 +42,15 @@ namespace cytnx {
     };
 
     struct call_self_adjoint_eigh {
+      char jobz = 'N';
+      char uplo = 'U';
+
       template <class Matrix, class Vector>
         requires requires(Matrix &&matrix, Vector &&values) {
           lapack::self_adjoint_eigh('N', 'U', std::forward<Matrix>(matrix),
                                     std::forward<Vector>(values));
         }
       void operator()(Matrix &&matrix, Vector &&values) const {
-        lapack::self_adjoint_eigh('N', 'U', std::forward<Matrix>(matrix),
-                                  std::forward<Vector>(values));
-      }
-
-      template <class Matrix, class Vector>
-        requires requires(char jobz, char uplo, Matrix &&matrix, Vector &&values) {
-          lapack::self_adjoint_eigh(jobz, uplo, std::forward<Matrix>(matrix),
-                                    std::forward<Vector>(values));
-        }
-      void operator()(char jobz, char uplo, Matrix &&matrix, Vector &&values) const {
         lapack::self_adjoint_eigh(jobz, uplo, std::forward<Matrix>(matrix),
                                   std::forward<Vector>(values));
       }
@@ -74,19 +67,8 @@ namespace cytnx {
   template <class MatrixArg, class VectorArg>
     requires AnyDispatchInvocable<linalg_mdspan_detail::call_svd_values, MatrixArg, VectorArg>
   void svd_values(MatrixArg &&a, VectorArg &&s) {
-    tensor_t_detail::dispatch_visit(
-      [](auto &&matrix, auto &&values) {
-        if constexpr (std::is_invocable_v<linalg_mdspan_detail::call_svd_values, decltype(matrix),
-                                          decltype(values)>) {
-          linalg_mdspan_detail::call_svd_values{}(std::forward<decltype(matrix)>(matrix),
-                                                  std::forward<decltype(values)>(values));
-        } else {
-          cytnx_error_msg(true,
-                          "[ERROR] svd_values variant alternatives have incompatible dtype, "
-                          "layout, rank, or backend.%s",
-                          "\n");
-        }
-      },
+    invoke_kernel<linalg_mdspan_detail::call_svd_values>(
+      "[ERROR] svd_values variant alternatives have incompatible dtype, layout, rank, or backend.",
       std::forward<MatrixArg>(a), std::forward<VectorArg>(s));
   }
 
@@ -102,20 +84,8 @@ namespace cytnx {
     requires AnyDispatchInvocable<linalg_mdspan_detail::call_svd, MatrixArg, VectorArg,
                                   LeftSingularVectorsArg, RightSingularVectorsArg>
   void svd(MatrixArg &&a, VectorArg &&s, LeftSingularVectorsArg &&u, RightSingularVectorsArg &&vt) {
-    tensor_t_detail::dispatch_visit(
-      [](auto &&matrix, auto &&values, auto &&left, auto &&right) {
-        if constexpr (std::is_invocable_v<linalg_mdspan_detail::call_svd, decltype(matrix),
-                                          decltype(values), decltype(left), decltype(right)>) {
-          linalg_mdspan_detail::call_svd{}(
-            std::forward<decltype(matrix)>(matrix), std::forward<decltype(values)>(values),
-            std::forward<decltype(left)>(left), std::forward<decltype(right)>(right));
-        } else {
-          cytnx_error_msg(true,
-                          "[ERROR] svd variant alternatives have incompatible dtype, layout, rank, "
-                          "or backend.%s",
-                          "\n");
-        }
-      },
+    invoke_kernel<linalg_mdspan_detail::call_svd>(
+      "[ERROR] svd variant alternatives have incompatible dtype, layout, rank, or backend.",
       std::forward<MatrixArg>(a), std::forward<VectorArg>(s),
       std::forward<LeftSingularVectorsArg>(u), std::forward<RightSingularVectorsArg>(vt));
   }
@@ -131,20 +101,10 @@ namespace cytnx {
     requires AnyDispatchInvocable<linalg_mdspan_detail::call_self_adjoint_eigh, MatrixArg,
                                   VectorArg>
   void self_adjoint_eigh(char jobz, char uplo, MatrixArg &&a, VectorArg &&w) {
-    tensor_t_detail::dispatch_visit(
-      [jobz, uplo](auto &&matrix, auto &&values) {
-        if constexpr (std::is_invocable_v<linalg_mdspan_detail::call_self_adjoint_eigh,
-                                          decltype(matrix), decltype(values)>) {
-          linalg_mdspan_detail::call_self_adjoint_eigh{}(jobz, uplo,
-                                                         std::forward<decltype(matrix)>(matrix),
-                                                         std::forward<decltype(values)>(values));
-        } else {
-          cytnx_error_msg(true,
-                          "[ERROR] self_adjoint_eigh variant alternatives have incompatible dtype, "
-                          "layout, rank, or backend.%s",
-                          "\n");
-        }
-      },
+    invoke_kernel(
+      linalg_mdspan_detail::call_self_adjoint_eigh{jobz, uplo},
+      "[ERROR] self_adjoint_eigh variant alternatives have incompatible dtype, layout, rank, or "
+      "backend.",
       std::forward<MatrixArg>(a), std::forward<VectorArg>(w));
   }
 
