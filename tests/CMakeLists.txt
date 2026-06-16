@@ -24,6 +24,7 @@ add_executable(
   Tensor_test.cpp
   mdspan_test.cpp
   TensorT_test.cpp
+  lapack_mdspan_test.cpp
   Storage_test.cpp
   search_tree_test.cpp
   utils_test/vec_concatenate.cpp
