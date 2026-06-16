@@ -17,6 +17,14 @@ namespace cytnx::linalg_mdspan_backend {
     static constexpr std::string_view name = "svd";
   };
 
+  struct svd_divide_conquer_values_kernel {
+    static constexpr std::string_view name = "svd_divide_conquer_values";
+  };
+
+  struct svd_divide_conquer_kernel {
+    static constexpr std::string_view name = "svd_divide_conquer";
+  };
+
   struct self_adjoint_eigh_kernel {
     static constexpr std::string_view name = "self_adjoint_eigh";
     char jobz = 'N';
@@ -48,6 +56,21 @@ namespace cytnx::linalg_mdspan_backend {
   void run_kernel(svd_kernel, Matrix matrix, Vector values, LeftSingularVectors left,
                   RightSingularVectors right) {
     lapack::svd(matrix, values, left, right);
+  }
+
+  template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+  void run_kernel(svd_divide_conquer_values_kernel, Matrix matrix, Vector values) {
+    lapack::svd_divide_conquer_values(matrix, values);
+  }
+
+  template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector,
+            lapack::LapackMatrix LeftSingularVectors, lapack::LapackMatrix RightSingularVectors>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+             mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
+  void run_kernel(svd_divide_conquer_kernel, Matrix matrix, Vector values, LeftSingularVectors left,
+                  RightSingularVectors right) {
+    lapack::svd_divide_conquer(matrix, values, left, right);
   }
 
   template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>

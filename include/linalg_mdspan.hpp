@@ -48,6 +48,38 @@ namespace cytnx {
   }
 
   /**
+   * @brief Compute singular values with the divide-and-conquer SVD driver.
+   *
+   * Concrete mdspan arguments call the checked LAPACK backend directly. Variant arguments dispatch
+   * over alternatives and report an error if the active alternatives are incompatible.
+   */
+  template <class MatrixArg, class VectorArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::svd_divide_conquer_values_kernel,
+                                  MatrixArg, VectorArg>
+  void svd_divide_conquer_values(MatrixArg &&a, VectorArg &&s) {
+    invoke_kernel(linalg_mdspan_backend::svd_divide_conquer_values_kernel{},
+                  std::forward<MatrixArg>(a), std::forward<VectorArg>(s));
+  }
+
+  /**
+   * @brief Compute the thin SVD with the divide-and-conquer SVD driver.
+   *
+   * `a` is overwritten by the backend. Concrete mdspan arguments call the checked LAPACK backend
+   * directly. Variant arguments dispatch over alternatives and report an error if the active
+   * alternatives are incompatible.
+   */
+  template <class MatrixArg, class VectorArg, class LeftSingularVectorsArg,
+            class RightSingularVectorsArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::svd_divide_conquer_kernel, MatrixArg,
+                                  VectorArg, LeftSingularVectorsArg, RightSingularVectorsArg>
+  void svd_divide_conquer(MatrixArg &&a, VectorArg &&s, LeftSingularVectorsArg &&u,
+                          RightSingularVectorsArg &&vt) {
+    invoke_kernel(linalg_mdspan_backend::svd_divide_conquer_kernel{}, std::forward<MatrixArg>(a),
+                  std::forward<VectorArg>(s), std::forward<LeftSingularVectorsArg>(u),
+                  std::forward<RightSingularVectorsArg>(vt));
+  }
+
+  /**
    * @brief Diagonalize a real symmetric or complex Hermitian host layout-right mdspan matrix view.
    *
    * The wrapper uses row-major logical indexing and translates the triangular `uplo` selector for

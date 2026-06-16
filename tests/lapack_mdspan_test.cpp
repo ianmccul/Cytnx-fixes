@@ -313,6 +313,38 @@ namespace {
     EXPECT_NEAR(s[1], 3.0F, 1e-5F);
   }
 
+  TEST(LapackMdspanTest, RowMajorGesddComputesSingularValues) {
+    std::vector<double> a = {
+      3.0, 0.0, 0.0, 0.0, 4.0, 0.0,
+    };
+    std::vector<double> s(2);
+
+    const int info = cytnx::lapack::lowlevel::gesdd(matrix_view<double>(a.data(), 2, 3),
+                                                    vector_view<double>(s.data(), 2));
+
+    ASSERT_EQ(info, 0);
+    EXPECT_NEAR(s[0], 4.0, 1e-12);
+    EXPECT_NEAR(s[1], 3.0, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, RowMajorGesddSupportsComplexFloat) {
+    using complex = std::complex<float>;
+    std::vector<complex> a = {
+      complex{0.0F, 3.0F},
+      complex{0.0F, 0.0F},
+      complex{0.0F, 0.0F},
+      complex{4.0F, 0.0F},
+    };
+    std::vector<float> s(2);
+
+    const int info = cytnx::lapack::lowlevel::gesdd(matrix_view<complex>(a.data(), 2, 2),
+                                                    vector_view<float>(s.data(), 2));
+
+    ASSERT_EQ(info, 0);
+    EXPECT_NEAR(s[0], 4.0F, 1e-5F);
+    EXPECT_NEAR(s[1], 3.0F, 1e-5F);
+  }
+
   TEST(LapackMdspanTest, RowMajorGesvdComputesThinFactors) {
     const std::vector<double> original = {
       1.0, 2.0, 0.0, 0.0, 1.0, 3.0,
@@ -336,6 +368,30 @@ namespace {
     }
   }
 
+  TEST(LapackMdspanTest, RowMajorGesddComputesThinFactors) {
+    const std::vector<double> original = {
+      1.0, 2.0, 0.0, 0.0, 1.0, 3.0,
+    };
+    std::vector<double> a = original;
+    std::vector<double> s(2);
+    std::vector<double> u(2 * 2);
+    std::vector<double> vt(2 * 3);
+
+    cytnx::lapack::svd_divide_conquer(
+      matrix_view<double>(a.data(), 2, 3), vector_view<double>(s.data(), 2),
+      matrix_view<double>(u.data(), 2, 2), matrix_view<double>(vt.data(), 2, 3));
+
+    for (std::size_t i = 0; i < 2; ++i) {
+      for (std::size_t j = 0; j < 3; ++j) {
+        double reconstructed = 0.0;
+        for (std::size_t k = 0; k < 2; ++k) {
+          reconstructed += u[i * 2 + k] * s[k] * vt[k * 3 + j];
+        }
+        EXPECT_NEAR(reconstructed, original[i * 3 + j], 1e-12);
+      }
+    }
+  }
+
   TEST(LapackMdspanTest, CheckedSvdValuesWrapperComputesSingularValues) {
     std::vector<double> a = {
       3.0, 0.0, 0.0, 0.0, 4.0, 0.0,
@@ -347,6 +403,38 @@ namespace {
 
     EXPECT_NEAR(s[0], 4.0, 1e-12);
     EXPECT_NEAR(s[1], 3.0, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, CheckedGesddValuesWrapperComputesSingularValues) {
+    std::vector<double> a = {
+      3.0, 0.0, 0.0, 0.0, 4.0, 0.0,
+    };
+    std::vector<double> s(2);
+
+    cytnx::lapack::svd_divide_conquer_values(matrix_view<double>(a.data(), 2, 3),
+                                             vector_view<double>(s.data(), 2));
+
+    EXPECT_NEAR(s[0], 4.0, 1e-12);
+    EXPECT_NEAR(s[1], 3.0, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, GesddRejectsSmallSingularValueOutput) {
+    std::vector<double> a = {
+      1.0,
+      0.0,
+      0.0,
+      1.0,
+    };
+    std::vector<double> s(1);
+
+    try {
+      cytnx::lapack::svd_divide_conquer_values(matrix_view<double>(a.data(), 2, 2),
+                                               vector_view<double>(s.data(), 1));
+      FAIL() << "Expected too-small singular-value output to fail.";
+    } catch (const std::logic_error &err) {
+      const std::string message = err.what();
+      EXPECT_NE(message.find("LAPACK gesdd singular-value output is too small"), std::string::npos);
+    }
   }
 
   TEST(LapackMdspanTest, CheckedSelfAdjointEighWrapperComputesEigenvalues) {
@@ -496,6 +584,22 @@ namespace {
     std::vector<double> s(2);
 
     cytnx::svd_values(matrix_view<double>(a.data(), 2, 2), vector_view<double>(s.data(), 2));
+
+    EXPECT_NEAR(s[0], 5.464985704219043, 1e-12);
+    EXPECT_NEAR(s[1], 0.365966190626257, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, PublicGesddValuesAcceptsRawHostMdspans) {
+    std::vector<double> a = {
+      1.0,
+      2.0,
+      3.0,
+      4.0,
+    };
+    std::vector<double> s(2);
+
+    cytnx::svd_divide_conquer_values(matrix_view<double>(a.data(), 2, 2),
+                                     vector_view<double>(s.data(), 2));
 
     EXPECT_NEAR(s[0], 5.464985704219043, 1e-12);
     EXPECT_NEAR(s[1], 0.365966190626257, 1e-12);

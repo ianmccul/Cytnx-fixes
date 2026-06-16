@@ -37,6 +37,23 @@ namespace cytnx::lapack::fortran {
                const blas_int *ldu, std::complex<double> *vt, const blas_int *ldvt,
                std::complex<double> *work, const blas_int *lwork, double *rwork, blas_int *info);
 
+  void sgesdd_(const char *jobz, const blas_int *m, const blas_int *n, float *a,
+               const blas_int *lda, float *s, float *u, const blas_int *ldu, float *vt,
+               const blas_int *ldvt, float *work, const blas_int *lwork, blas_int *iwork,
+               blas_int *info);
+  void dgesdd_(const char *jobz, const blas_int *m, const blas_int *n, double *a,
+               const blas_int *lda, double *s, double *u, const blas_int *ldu, double *vt,
+               const blas_int *ldvt, double *work, const blas_int *lwork, blas_int *iwork,
+               blas_int *info);
+  void cgesdd_(const char *jobz, const blas_int *m, const blas_int *n, std::complex<float> *a,
+               const blas_int *lda, float *s, std::complex<float> *u, const blas_int *ldu,
+               std::complex<float> *vt, const blas_int *ldvt, std::complex<float> *work,
+               const blas_int *lwork, float *rwork, blas_int *iwork, blas_int *info);
+  void zgesdd_(const char *jobz, const blas_int *m, const blas_int *n, std::complex<double> *a,
+               const blas_int *lda, double *s, std::complex<double> *u, const blas_int *ldu,
+               std::complex<double> *vt, const blas_int *ldvt, std::complex<double> *work,
+               const blas_int *lwork, double *rwork, blas_int *iwork, blas_int *info);
+
   void ssyev_(const char *jobz, const char *uplo, const blas_int *n, float *a, const blas_int *lda,
               float *w, float *work, const blas_int *lwork, blas_int *info);
   void dsyev_(const char *jobz, const char *uplo, const blas_int *n, double *a, const blas_int *lda,
@@ -185,6 +202,36 @@ namespace cytnx::lapack {
                         const blas_int *ldvt, std::complex<double> *work, const blas_int *lwork,
                         double *rwork, blas_int *info) {
         fortran::zgesvd_(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, info);
+      }
+
+      inline void gesdd(const char *jobz, const blas_int *m, const blas_int *n, float *a,
+                        const blas_int *lda, float *s, float *u, const blas_int *ldu, float *vt,
+                        const blas_int *ldvt, float *work, const blas_int *lwork, blas_int *iwork,
+                        blas_int *info) {
+        fortran::sgesdd_(jobz, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, iwork, info);
+      }
+
+      inline void gesdd(const char *jobz, const blas_int *m, const blas_int *n, double *a,
+                        const blas_int *lda, double *s, double *u, const blas_int *ldu, double *vt,
+                        const blas_int *ldvt, double *work, const blas_int *lwork, blas_int *iwork,
+                        blas_int *info) {
+        fortran::dgesdd_(jobz, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, iwork, info);
+      }
+
+      inline void gesdd(const char *jobz, const blas_int *m, const blas_int *n,
+                        std::complex<float> *a, const blas_int *lda, float *s,
+                        std::complex<float> *u, const blas_int *ldu, std::complex<float> *vt,
+                        const blas_int *ldvt, std::complex<float> *work, const blas_int *lwork,
+                        float *rwork, blas_int *iwork, blas_int *info) {
+        fortran::cgesdd_(jobz, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, iwork, info);
+      }
+
+      inline void gesdd(const char *jobz, const blas_int *m, const blas_int *n,
+                        std::complex<double> *a, const blas_int *lda, double *s,
+                        std::complex<double> *u, const blas_int *ldu, std::complex<double> *vt,
+                        const blas_int *ldvt, std::complex<double> *work, const blas_int *lwork,
+                        double *rwork, blas_int *iwork, blas_int *info) {
+        fortran::zgesdd_(jobz, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, iwork, info);
       }
 
       inline void syev(const char *jobz, const char *uplo, const blas_int *n, float *a,
@@ -398,6 +445,108 @@ namespace cytnx::lapack {
 
     template <LapackMatrix Matrix, RealLapackVector Vector>
       requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+    int gesdd(Matrix a, Vector s) {
+      using scalar_type = typename Matrix::element_type;
+      using real_type = mdspan_concepts::real_element_t<scalar_type>;
+
+      const auto rows = a.extent(0);
+      const auto cols = a.extent(1);
+      const auto min_dim = std::min(rows, cols);
+      cytnx_error_msg(s.extent(0) < min_dim,
+                      "[ERROR] LAPACK gesdd singular-value output is too small.%s", "\n");
+
+      const blas_int native_m = detail::to_blas_int(cols, "cols");
+      const blas_int native_n = detail::to_blas_int(rows, "rows");
+      const blas_int lda = std::max<blas_int>(1, native_m);
+      const blas_int one = 1;
+      blas_int info = 0;
+      blas_int lwork = -1;
+      std::vector<blas_int> iwork(std::max<std::size_t>(1, 8 * min_dim));
+
+      if constexpr (RealLapackScalar<scalar_type>) {
+        scalar_type work_query{};
+        native::gesdd("N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(), nullptr,
+                      &one, nullptr, &one, &work_query, &lwork, iwork.data(), &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::gesdd("N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(), nullptr,
+                      &one, nullptr, &one, work.data(), &lwork, iwork.data(), &info);
+      } else {
+        scalar_type work_query{};
+        std::vector<real_type> rwork(std::max<std::size_t>(1, 5 * min_dim));
+        native::gesdd("N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(), nullptr,
+                      &one, nullptr, &one, &work_query, &lwork, rwork.data(), iwork.data(), &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::gesdd("N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(), nullptr,
+                      &one, nullptr, &one, work.data(), &lwork, rwork.data(), iwork.data(), &info);
+      }
+
+      return info;
+    }
+
+    template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
+              LapackMatrix RightSingularVectors>
+      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+               mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
+    int gesdd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
+      using scalar_type = typename Matrix::element_type;
+      using real_type = mdspan_concepts::real_element_t<scalar_type>;
+
+      const auto rows = a.extent(0);
+      const auto cols = a.extent(1);
+      const auto min_dim = std::min(rows, cols);
+      const auto max_dim = std::max(rows, cols);
+      cytnx_error_msg(s.extent(0) < min_dim,
+                      "[ERROR] LAPACK gesdd singular-value output is too small.%s", "\n");
+      cytnx_error_msg(u.extent(0) < rows || u.extent(1) < min_dim,
+                      "[ERROR] LAPACK gesdd U output has incompatible shape.%s", "\n");
+      cytnx_error_msg(vt.extent(0) < min_dim || vt.extent(1) < cols,
+                      "[ERROR] LAPACK gesdd VT output has incompatible shape.%s", "\n");
+
+      const blas_int native_m = detail::to_blas_int(cols, "cols");
+      const blas_int native_n = detail::to_blas_int(rows, "rows");
+      const blas_int lda = std::max<blas_int>(1, native_m);
+      const blas_int native_ldu = std::max<blas_int>(1, native_m);
+      const blas_int native_ldvt = std::max<blas_int>(1, detail::to_blas_int(min_dim, "min_dim"));
+      blas_int info = 0;
+      blas_int lwork = -1;
+      std::vector<blas_int> iwork(std::max<std::size_t>(1, 8 * min_dim));
+
+      if constexpr (RealLapackScalar<scalar_type>) {
+        scalar_type work_query{};
+        native::gesdd("S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, &work_query,
+                      &lwork, iwork.data(), &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::gesdd("S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, work.data(),
+                      &lwork, iwork.data(), &info);
+      } else {
+        scalar_type work_query{};
+        const std::size_t rwork_size =
+          std::max<std::size_t>(1, 5 * min_dim * min_dim + 7 * min_dim + 2 * max_dim * min_dim);
+        std::vector<real_type> rwork(rwork_size);
+        native::gesdd("S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, &work_query,
+                      &lwork, rwork.data(), iwork.data(), &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::gesdd("S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
+                      vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, work.data(),
+                      &lwork, rwork.data(), iwork.data(), &info);
+      }
+
+      return info;
+    }
+
+    template <LapackMatrix Matrix, RealLapackVector Vector>
+      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
     int eigh(char jobz, char uplo, Matrix a, Vector w) {
       using scalar_type = typename Matrix::element_type;
       using real_type = mdspan_concepts::real_element_t<scalar_type>;
@@ -599,6 +748,26 @@ namespace cytnx::lapack {
              mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
   void svd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
     detail::check_lapack_info("gesvd", lowlevel::gesvd(a, s, u, vt), a, s, u, vt);
+  }
+
+  /**
+   * @brief Compute singular values with the divide-and-conquer SVD driver.
+   */
+  template <LapackMatrix Matrix, RealLapackVector Vector>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+  void svd_divide_conquer_values(Matrix a, Vector s) {
+    detail::check_lapack_info("gesdd", lowlevel::gesdd(a, s), a, s);
+  }
+
+  /**
+   * @brief Compute a thin singular value decomposition with the divide-and-conquer SVD driver.
+   */
+  template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
+            LapackMatrix RightSingularVectors>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+             mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
+  void svd_divide_conquer(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
+    detail::check_lapack_info("gesdd", lowlevel::gesdd(a, s, u, vt), a, s, u, vt);
   }
 
   /**
