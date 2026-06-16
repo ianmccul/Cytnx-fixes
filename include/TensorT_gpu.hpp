@@ -11,14 +11,16 @@
 
 namespace cytnx {
 
-  struct cuda_space {};
-
   struct cuda_access {
-    using space = cuda_space;
     int device = Device.cuda;
   };
 
   namespace tensor_t_detail {
+
+    template <class T>
+    struct mdspan_accessor_for<T, cuda_access> {
+      using type = stdex::cuda_accessor<T>;
+    };
 
     template <>
     inline cuda_access make_access<cuda_access>(int device) {

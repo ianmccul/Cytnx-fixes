@@ -34,10 +34,15 @@ namespace {
   static_assert(cytnx::NumericScalar<cytnx::cytnx_float>);
   static_assert(cytnx::NumericScalar<cytnx::cytnx_complex128>);
   static_assert(cytnx::mdspan_concepts::MdspanView<HostTensorT<cytnx_double, 3, layout_stride>>);
+  static_assert(
+    cytnx::mdspan_concepts::HostAccessible<HostTensorT<cytnx_double, 3, layout_stride>>);
   static_assert(cytnx::mdspan_concepts::LayoutStride<HostTensorT<cytnx_double, 3, layout_stride>>);
   static_assert(cytnx::mdspan_concepts::LayoutRight<HostTensorT<cytnx_double, 3, layout_right>>);
 
 #ifdef UNI_GPU
+  using cytnx::CudaTensorT;
+  static_assert(cytnx::mdspan_concepts::CudaAccessible<CudaTensorT<cytnx_double, 3>>);
+  static_assert(!cytnx::mdspan_concepts::HostAccessible<CudaTensorT<cytnx_double, 3>>);
   static_assert(std::variant_size_v<NumericTensor<2>> == 8);
   static_assert(std::variant_size_v<RealTensor<2>> == 4);
 #else

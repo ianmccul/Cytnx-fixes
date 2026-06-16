@@ -16,7 +16,16 @@ namespace cytnx::mdspan_concepts {
   struct is_host_accessor<stdex::default_accessor<T>> : std::true_type {};
 
   template <class Accessor>
+  struct is_cuda_accessor : std::false_type {};
+
+  template <class T>
+  struct is_cuda_accessor<stdex::cuda_accessor<T>> : std::true_type {};
+
+  template <class Accessor>
   concept HostAccessor = is_host_accessor<std::remove_cvref_t<Accessor>>::value;
+
+  template <class Accessor>
+  concept CudaAccessor = is_cuda_accessor<std::remove_cvref_t<Accessor>>::value;
 
   template <class View>
   concept MdspanView = requires(View view, std::size_t axis) {
@@ -33,6 +42,9 @@ namespace cytnx::mdspan_concepts {
 
   template <class View>
   concept HostAccessible = MdspanView<View> && HostAccessor<typename View::accessor_type>;
+
+  template <class View>
+  concept CudaAccessible = MdspanView<View> && CudaAccessor<typename View::accessor_type>;
 
   template <class View, std::size_t Rank>
   concept RankOf = MdspanView<View> && View::rank() == Rank;

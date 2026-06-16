@@ -3,16 +3,21 @@
 
 #include "Device.hpp"
 #include "cytnx_error.hpp"
+#include "mdspan.hpp"
 
 namespace cytnx {
 
-  struct host_space {};
-
-  struct host_access {
-    using space = host_space;
-  };
+  struct host_access {};
 
   namespace tensor_t_detail {
+
+    template <class T, class Access>
+    struct mdspan_accessor_for;
+
+    template <class T>
+    struct mdspan_accessor_for<T, host_access> {
+      using type = stdex::default_accessor<T>;
+    };
 
     template <class Access>
     Access make_access(int device);

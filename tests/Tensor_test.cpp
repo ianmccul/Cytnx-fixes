@@ -1,4 +1,5 @@
 #include "Tensor_test.h"
+#include "mdspan_concepts.hpp"
 #include "test_tools.h"
 
 TEST_F(TensorTest, Constructor) {
@@ -210,6 +211,7 @@ TEST_F(TensorTest, as_mdspan_contiguous_tensor) {
 
   auto view = tensor.as_mdspan<cytnx_double, 3>();
 
+  static_assert(cytnx::mdspan_concepts::HostAccessible<decltype(view)>);
   EXPECT_EQ(view.rank(), 3);
   EXPECT_EQ(view.extent(0), 2);
   EXPECT_EQ(view.extent(1), 3);
@@ -261,6 +263,7 @@ TEST_F(TensorTest, as_right_mdspan_makes_permuted_tensor_contiguous) {
 
   auto view = permuted.as_right_mdspan<cytnx_double, 3>();
 
+  static_assert(cytnx::mdspan_concepts::HostAccessible<decltype(view)>);
   EXPECT_TRUE(permuted.is_contiguous());
   EXPECT_EQ(view.extent(0), 3);
   EXPECT_EQ(view.extent(1), 4);
@@ -273,6 +276,29 @@ TEST_F(TensorTest, as_right_mdspan_makes_permuted_tensor_contiguous) {
   view(2, 3, 1) = 321;
   EXPECT_EQ(permuted.at<cytnx_double>({2, 3, 1}), 321);
   EXPECT_EQ(tensor.at<cytnx_double>({1, 2, 3}), 23);
+}
+
+TEST_F(TensorTest, as_host_mdspan_names_host_access_explicitly) {
+  Tensor tensor = arange(2 * 3).reshape({2, 3});
+
+  auto view = tensor.as_host_mdspan<cytnx_double, 2>();
+
+  static_assert(cytnx::mdspan_concepts::HostAccessible<decltype(view)>);
+  EXPECT_EQ(view.extent(0), 2);
+  EXPECT_EQ(view.extent(1), 3);
+  EXPECT_EQ(view(1, 2), tensor.at<cytnx_double>({1, 2}));
+}
+
+TEST_F(TensorTest, as_host_right_mdspan_names_host_access_explicitly) {
+  Tensor tensor = arange(2 * 3).reshape({2, 3});
+
+  auto view = tensor.as_host_right_mdspan<cytnx_double, 2>();
+
+  static_assert(cytnx::mdspan_concepts::HostAccessible<decltype(view)>);
+  EXPECT_EQ(view.extent(0), 2);
+  EXPECT_EQ(view.extent(1), 3);
+  EXPECT_EQ(view.stride(0), 3);
+  EXPECT_EQ(view.stride(1), 1);
 }
 
 TEST_F(TensorTest, get) {

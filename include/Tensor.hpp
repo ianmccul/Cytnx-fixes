@@ -5,6 +5,7 @@
 #include "cytnx_error.hpp"
 #include "Device.hpp"
 #include "intrusive_ptr_base.hpp"
+#include "TensorT_cpu.hpp"
 #include <iostream>
 #include <fstream>
 #include "utils/dynamic_arg_resolver.hpp"
@@ -15,6 +16,10 @@
 #include <vector>
 #include <initializer_list>
 #include <string>
+
+#ifdef UNI_GPU
+  #include "TensorT_gpu.hpp"
+#endif
 
 #include "backend/Scalar.hpp"
 #include "backend/Storage.hpp"
@@ -530,13 +535,15 @@ namespace cytnx {
      *
      * The returned view preserves the Tensor's current logical layout, including non-contiguous
      * permutations, using a `stdex::layout_stride` mapping. The Tensor storage must outlive the
-     * returned mdspan. The template type and rank must match the Tensor dtype and rank.
+     * returned mdspan. The template type, rank, and access policy must match the Tensor dtype,
+     * rank, and device.
      */
-    template <typename T, std::size_t Rank>
+    template <typename T, std::size_t Rank, class Access = host_access>
     auto as_mdspan() const {
       using element_type = std::remove_cv_t<T>;
       using extents_type = stdex::dextents<std::size_t, Rank>;
       using mapping_type = typename stdex::layout_stride::template mapping<extents_type>;
+      using accessor_type = typename tensor_t_detail::mdspan_accessor_for<T, Access>::type;
 
       cytnx_error_msg(this->dtype() != Type_class::cy_typeid_v<element_type>,
                       "[ERROR] Attempt to convert dtype %d (%s) to mdspan of type %s",
@@ -545,6 +552,8 @@ namespace cytnx {
       cytnx_error_msg(
         this->rank() != Rank, "[ERROR] Attempt to view rank-%llu Tensor as rank-%llu mdspan.%s",
         static_cast<unsigned long long>(this->rank()), static_cast<unsigned long long>(Rank), "\n");
+      auto access = tensor_t_detail::make_access<Access>(this->device());
+      (void)access;
 
       std::array<std::size_t, Rank> extents{};
       std::array<std::size_t, Rank> strides{};
@@ -559,9 +568,27 @@ namespace cytnx {
         step *= extents[axis];
       }
 
-      return stdex::mdspan<T, extents_type, stdex::layout_stride>(
+      return stdex::mdspan<T, extents_type, stdex::layout_stride, accessor_type>(
         this->ptr_as<T>(), mapping_type(extents_type(extents), strides));
     }
+
+    /**
+     * @brief Return a non-owning host mdspan view of the Tensor storage.
+     */
+    template <typename T, std::size_t Rank>
+    auto as_host_mdspan() const {
+      return as_mdspan<T, Rank, host_access>();
+    }
+
+  #ifdef UNI_GPU
+    /**
+     * @brief Return a non-owning CUDA mdspan view of the Tensor storage.
+     */
+    template <typename T, std::size_t Rank>
+    auto as_device_mdspan() const {
+      return as_mdspan<T, Rank, cuda_access>();
+    }
+  #endif
 
     /**
      * @brief Return a non-owning typed layout-right mdspan view of this Tensor.
@@ -569,12 +596,14 @@ namespace cytnx {
      * This is a mutating function: it first calls `contiguous_()`, so a non-contiguous Tensor may
      * receive new contiguous storage. The returned view then uses `stdex::layout_right`, matching
      * Cytnx's default row-major contiguous Tensor layout. The Tensor storage must outlive the
-     * returned mdspan. The template type and rank must match the Tensor dtype and rank.
+     * returned mdspan. The template type, rank, and access policy must match the Tensor dtype,
+     * rank, and device.
      */
-    template <typename T, std::size_t Rank>
+    template <typename T, std::size_t Rank, class Access = host_access>
     auto as_right_mdspan() {
       using element_type = std::remove_cv_t<T>;
       using extents_type = stdex::dextents<std::size_t, Rank>;
+      using accessor_type = typename tensor_t_detail::mdspan_accessor_for<T, Access>::type;
 
       cytnx_error_msg(this->dtype() != Type_class::cy_typeid_v<element_type>,
                       "[ERROR] Attempt to convert dtype %d (%s) to mdspan of type %s",
@@ -583,17 +612,37 @@ namespace cytnx {
       cytnx_error_msg(
         this->rank() != Rank, "[ERROR] Attempt to view rank-%llu Tensor as rank-%llu mdspan.%s",
         static_cast<unsigned long long>(this->rank()), static_cast<unsigned long long>(Rank), "\n");
+      auto access = tensor_t_detail::make_access<Access>(this->device());
+      (void)access;
       this->contiguous_();
 
       std::array<std::size_t, Rank> extents{};
       for (std::size_t i = 0; i < Rank; ++i) {
         extents[i] = static_cast<std::size_t>(this->_impl->_shape[i]);
       }
-      return stdex::mdspan<T, extents_type, stdex::layout_right>(this->ptr_as<T>(),
-                                                                 extents_type(extents));
+      return stdex::mdspan<T, extents_type, stdex::layout_right, accessor_type>(
+        this->ptr_as<T>(), extents_type(extents));
     }
 
-#ifdef UNI_GPU
+    /**
+     * @brief Return a non-owning host layout-right mdspan view of this Tensor.
+     */
+    template <typename T, std::size_t Rank>
+    auto as_host_right_mdspan() {
+      return as_right_mdspan<T, Rank, host_access>();
+    }
+
+  #ifdef UNI_GPU
+    /**
+     * @brief Return a non-owning CUDA layout-right mdspan view of this Tensor.
+     */
+    template <typename T, std::size_t Rank>
+    auto as_device_right_mdspan() {
+      return as_right_mdspan<T, Rank, cuda_access>();
+    }
+  #endif
+
+  #ifdef UNI_GPU
     // std::variant of pointers to Type_list_gpu, without void ....
     using gpu_pointer_types =
       make_variant_from_transform_t<typename internal::exclude_first<Type_list_gpu>::type,

@@ -17,6 +17,11 @@ namespace {
   using matrix_view = cytnx::stdex::mdspan<T, cytnx::stdex::dextents<std::size_t, 2>>;
 
   template <class T>
+  using cuda_matrix_view =
+    cytnx::stdex::mdspan<T, cytnx::stdex::dextents<std::size_t, 2>, cytnx::stdex::layout_right,
+                         cytnx::stdex::cuda_accessor<T>>;
+
+  template <class T>
   using vector_view = cytnx::stdex::mdspan<T, cytnx::stdex::dextents<std::size_t, 1>>;
 
   static_assert(cytnx::lapack::RealLapackScalar<float>);
@@ -24,6 +29,7 @@ namespace {
   static_assert(cytnx::lapack::ComplexLapackScalar<std::complex<float>>);
   static_assert(cytnx::lapack::ComplexLapackScalar<std::complex<double>>);
   static_assert(cytnx::lapack::LapackMatrix<matrix_view<double>>);
+  static_assert(!cytnx::lapack::LapackMatrix<cuda_matrix_view<double>>);
   static_assert(cytnx::lapack::RealLapackMatrix<matrix_view<double>>);
   static_assert(cytnx::lapack::ComplexLapackMatrix<matrix_view<std::complex<double>>>);
   static_assert(cytnx::lapack::LapackVector<vector_view<float>>);

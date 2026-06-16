@@ -15,12 +15,17 @@ namespace {
   using cytnx::stdex::mdspan;
 
   using right_matrix = mdspan<int, extents<std::size_t, 2, 3>>;
+  using cuda_right_matrix =
+    mdspan<int, extents<std::size_t, 2, 3>, layout_right, cytnx::stdex::cuda_accessor<int>>;
   using stride_matrix = mdspan<int, extents<std::size_t, 2, 3>, layout_stride>;
   using right_vector = mdspan<double, extents<std::size_t, dynamic_extent>>;
 
   static_assert(cytnx::mdspan_concepts::MdspanView<right_matrix>);
   static_assert(cytnx::mdspan_concepts::HostAccessor<cytnx::stdex::default_accessor<int>>);
+  static_assert(cytnx::mdspan_concepts::CudaAccessor<cytnx::stdex::cuda_accessor<int>>);
   static_assert(cytnx::mdspan_concepts::HostAccessible<right_matrix>);
+  static_assert(cytnx::mdspan_concepts::CudaAccessible<cuda_right_matrix>);
+  static_assert(!cytnx::mdspan_concepts::HostAccessible<cuda_right_matrix>);
   static_assert(cytnx::mdspan_concepts::Matrix<right_matrix>);
   static_assert(cytnx::mdspan_concepts::LayoutRight<right_matrix>);
   static_assert(cytnx::mdspan_concepts::LayoutRightMatrix<right_matrix>);

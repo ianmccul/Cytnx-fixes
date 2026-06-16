@@ -63,9 +63,9 @@ namespace cytnx {
     using access_type = Access;
     using layout_type = Layout;
     using extents_type = stdex::dextents<std::size_t, Rank>;
-    using view_type = stdex::mdspan<T, extents_type, Layout>;
+    using accessor_type = typename tensor_t_detail::mdspan_accessor_for<T, Access>::type;
+    using view_type = stdex::mdspan<T, extents_type, Layout, accessor_type>;
     using mapping_type = typename view_type::mapping_type;
-    using accessor_type = typename view_type::accessor_type;
     using owner_type = data_owner<T>;
     using data_handle_type = typename view_type::data_handle_type;
     using reference = typename view_type::reference;
@@ -323,7 +323,8 @@ namespace cytnx {
   TensorT<T, Rank, Access, stdex::layout_stride> make_tensor_t(Tensor &tensor) {
     using extents_type = stdex::dextents<std::size_t, Rank>;
     using mapping_type = typename stdex::layout_stride::template mapping<extents_type>;
-    using view_type = stdex::mdspan<T, extents_type, stdex::layout_stride>;
+    using tensor_type = TensorT<T, Rank, Access, stdex::layout_stride>;
+    using view_type = typename tensor_type::view_type;
 
     tensor_t_detail::check_tensor_type_and_rank<T, Rank>(tensor);
     auto access = tensor_t_detail::make_access<Access>(tensor.device());
@@ -331,7 +332,7 @@ namespace cytnx {
     const auto strides = tensor_t_detail::strides_from_tensor<Rank>(tensor, extents);
     auto owner = tensor_t_detail::owner_from_tensor<T>(tensor);
     view_type view(owner.get(), mapping_type(extents_type(extents), strides));
-    return TensorT<T, Rank, Access, stdex::layout_stride>(std::move(owner), view, access);
+    return tensor_type(std::move(owner), view, access);
   }
 
   /**
@@ -343,7 +344,8 @@ namespace cytnx {
   template <typename T, std::size_t Rank, class Access = host_access>
   TensorT<T, Rank, Access, stdex::layout_right> make_right_tensor_t(Tensor &tensor) {
     using extents_type = stdex::dextents<std::size_t, Rank>;
-    using view_type = stdex::mdspan<T, extents_type, stdex::layout_right>;
+    using tensor_type = TensorT<T, Rank, Access, stdex::layout_right>;
+    using view_type = typename tensor_type::view_type;
 
     tensor_t_detail::check_tensor_type_and_rank<T, Rank>(tensor);
     auto access = tensor_t_detail::make_access<Access>(tensor.device());
@@ -351,7 +353,7 @@ namespace cytnx {
     const auto extents = tensor_t_detail::extents_from_tensor<Rank>(tensor);
     auto owner = tensor_t_detail::owner_from_tensor<T>(tensor);
     view_type view(owner.get(), extents_type(extents));
-    return TensorT<T, Rank, Access, stdex::layout_right>(std::move(owner), view, access);
+    return tensor_type(std::move(owner), view, access);
   }
 
   /**

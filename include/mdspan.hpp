@@ -210,6 +210,22 @@ namespace cytnx {
       }
     };
 
+    template <class ElementType>
+    class cuda_accessor {
+     public:
+      using element_type = ElementType;
+      using data_handle_type = element_type*;
+      using reference = element_type&;
+
+      constexpr reference access(data_handle_type ptr, std::size_t offset) const noexcept {
+        return ptr[offset];
+      }
+
+      constexpr data_handle_type offset(data_handle_type ptr, std::size_t offset) const noexcept {
+        return ptr + offset;
+      }
+    };
+
     template <class ElementType, class Extents, class LayoutPolicy = layout_right,
               class AccessorPolicy = default_accessor<ElementType>>
     class mdspan {
