@@ -171,6 +171,16 @@ namespace cytnx::lapack {
       return uplo;
     }
 
+    template <class T>
+    T conjugate_if_complex(const T &value) {
+      if constexpr (std::is_same_v<std::remove_cv_t<T>, std::complex<float>> ||
+                    std::is_same_v<std::remove_cv_t<T>, std::complex<double>>) {
+        return std::conj(value);
+      } else {
+        return value;
+      }
+    }
+
   }  // namespace detail
 
   template <class T>
@@ -237,6 +247,16 @@ namespace cytnx::lapack {
   template <class View>
   concept MutableComplexLapackMatrix =
     ComplexLapackMatrix<View> && mdspan_concepts::MutableView<View>;
+
+  template <class Matrix, class Eigenvectors>
+  concept LapackEigenvectorMatrix =
+    MutableComplexLapackMatrix<Eigenvectors> &&
+    ((RealLapackScalar<typename Matrix::element_type> &&
+      std::same_as<mdspan_concepts::element_value_t<Eigenvectors>,
+                   std::complex<mdspan_concepts::element_value_t<Matrix>>>) ||
+     (ComplexLapackScalar<typename Matrix::element_type> &&
+      std::same_as<mdspan_concepts::element_value_t<Matrix>,
+                   mdspan_concepts::element_value_t<Eigenvectors>>));
 
   namespace lowlevel {
 
@@ -797,6 +817,70 @@ namespace cytnx::lapack {
       return info;
     }
 
+    template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector,
+              MutableLapackMatrix Eigenvectors>
+      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+               mdspan_concepts::SameElementType<Matrix, Eigenvectors>
+    int eigh_vectors(char uplo, Matrix a, Vector w, Eigenvectors vectors) {
+      const auto n = a.extent(0);
+      cytnx_error_msg(vectors.extent(0) < n || vectors.extent(1) < n,
+                      "[ERROR] LAPACK eigh eigenvector output has incompatible shape.%s", "\n");
+
+      const int info = eigh('V', uplo, a, w);
+      if (info != 0) return info;
+
+      for (std::size_t i = 0; i < n; ++i) {
+        for (std::size_t j = 0; j < n; ++j) {
+          vectors(i, j) = detail::conjugate_if_complex(a(i, j));
+        }
+      }
+      return info;
+    }
+
+    template <LapackMatrix Matrix, MutableComplexLapackVector Vector,
+              MutableComplexLapackMatrix Eigenvectors>
+      requires LapackEigenvalueVector<Matrix, Vector> &&
+               LapackEigenvectorMatrix<Matrix, Eigenvectors>
+    int geev_right_vectors(Matrix a, Vector w, Eigenvectors vectors) {
+      using complex_type = mdspan_concepts::element_value_t<Vector>;
+      using real_type = mdspan_concepts::real_element_t<complex_type>;
+
+      const auto n = a.extent(0);
+      cytnx_error_msg(a.extent(1) != n, "[ERROR] LAPACK geev input must be square.%s", "\n");
+      cytnx_error_msg(w.extent(0) < n, "[ERROR] LAPACK geev eigenvalue output is too small.%s",
+                      "\n");
+      cytnx_error_msg(vectors.extent(0) < n || vectors.extent(1) < n,
+                      "[ERROR] LAPACK geev eigenvector output has incompatible shape.%s", "\n");
+
+      const blas_int native_n = detail::to_blas_int(n, "n");
+      const blas_int lda = std::max<blas_int>(1, native_n);
+      const blas_int one = 1;
+      blas_int info = 0;
+      blas_int lwork = -1;
+
+      std::vector<complex_type> buffer(n * n);
+      for (std::size_t i = 0; i < n; ++i) {
+        for (std::size_t j = 0; j < n; ++j) {
+          buffer[i + j * n] = complex_type{a(i, j)};
+        }
+      }
+
+      complex_type work_query{};
+      std::vector<real_type> rwork(std::max<std::size_t>(1, 2 * n));
+      native::geev("N", "V", &native_n, buffer.data(), &lda, w.data_handle(), nullptr, &one,
+                   vectors.data_handle(), &lda, &work_query, &lwork, rwork.data(), &info);
+      if (info != 0) return info;
+      lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
+      std::vector<complex_type> work(static_cast<std::size_t>(lwork));
+      native::geev("N", "V", &native_n, buffer.data(), &lda, w.data_handle(), nullptr, &one,
+                   vectors.data_handle(), &lda, work.data(), &lwork, rwork.data(), &info);
+      if (info != 0) return info;
+
+      // LAPACK writes right eigenvectors as columns in column-major storage. The same memory viewed
+      // as row-major has eigenvectors as rows: vectors(i, j) is component j of eigenvector i.
+      return info;
+    }
+
     template <MutableRealLapackVector Diagonal, MutableRealLapackVector OffDiagonal>
       requires mdspan_concepts::SameElementType<Diagonal, OffDiagonal>
     int stev_values(Diagonal diagonal, OffDiagonal offdiagonal) {
@@ -1069,12 +1153,35 @@ namespace cytnx::lapack {
   }
 
   /**
+   * @brief Diagonalize a real symmetric or complex Hermitian matrix and write eigenvectors as rows.
+   */
+  template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector,
+            MutableLapackMatrix Eigenvectors>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+             mdspan_concepts::SameElementType<Matrix, Eigenvectors>
+  void self_adjoint_eigh_vectors(char uplo, Matrix a, Vector w, Eigenvectors vectors) {
+    detail::check_lapack_info("eigh", lowlevel::eigh_vectors(uplo, a, w, vectors), a, w, vectors);
+  }
+
+  /**
    * @brief Compute eigenvalues of a general square matrix with checked host LAPACK diagnostics.
    */
   template <MutableLapackMatrix Matrix, MutableComplexLapackVector Vector>
     requires LapackEigenvalueVector<Matrix, Vector>
   void eig_values(Matrix a, Vector w) {
     detail::check_lapack_info("geev", lowlevel::geev_values(a, w), a, w);
+  }
+
+  /**
+   * @brief Compute eigenvalues and right eigenvectors of a general square matrix.
+   *
+   * Eigenvectors are written as rows: `vectors(i, j)` is component `j` of eigenvector `i`.
+   */
+  template <LapackMatrix Matrix, MutableComplexLapackVector Vector,
+            MutableComplexLapackMatrix Eigenvectors>
+    requires LapackEigenvalueVector<Matrix, Vector> && LapackEigenvectorMatrix<Matrix, Eigenvectors>
+  void eig_right_vectors(Matrix a, Vector w, Eigenvectors vectors) {
+    detail::check_lapack_info("geev", lowlevel::geev_right_vectors(a, w, vectors), a, w, vectors);
   }
 
   /**

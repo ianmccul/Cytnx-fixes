@@ -95,6 +95,22 @@ namespace cytnx {
   }
 
   /**
+   * @brief Diagonalize a Hermitian matrix and write eigenvectors as rows.
+   *
+   * `vectors(i, j)` is component `j` of eigenvector `i`. This row-major convention keeps each
+   * eigenvector contiguous in memory.
+   */
+  template <class MatrixArg, class VectorArg, class EigenvectorsArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::self_adjoint_eigh_vectors_kernel,
+                                  MatrixArg, VectorArg, EigenvectorsArg>
+  void self_adjoint_eigh_vectors(char uplo, MatrixArg &&a, VectorArg &&w,
+                                 EigenvectorsArg &&vectors) {
+    invoke_kernel(linalg_mdspan_backend::self_adjoint_eigh_vectors_kernel{uplo},
+                  std::forward<MatrixArg>(a), std::forward<VectorArg>(w),
+                  std::forward<EigenvectorsArg>(vectors));
+  }
+
+  /**
    * @brief Compute eigenvalues of a general square host layout-right mdspan matrix view.
    *
    * Real inputs may have complex eigenvalues, so the eigenvalue output is always complex. Variant
@@ -106,6 +122,20 @@ namespace cytnx {
   void eig_values(MatrixArg &&a, VectorArg &&w) {
     invoke_kernel(linalg_mdspan_backend::eig_values_kernel{}, std::forward<MatrixArg>(a),
                   std::forward<VectorArg>(w));
+  }
+
+  /**
+   * @brief Compute eigenvalues and right eigenvectors of a general square matrix.
+   *
+   * Real inputs are internally promoted to a complex LAPACK call. Eigenvectors are written as rows:
+   * `vectors(i, j)` is component `j` of eigenvector `i`.
+   */
+  template <class MatrixArg, class VectorArg, class EigenvectorsArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::eig_right_vectors_kernel, MatrixArg,
+                                  VectorArg, EigenvectorsArg>
+  void eig_right_vectors(MatrixArg &&a, VectorArg &&w, EigenvectorsArg &&vectors) {
+    invoke_kernel(linalg_mdspan_backend::eig_right_vectors_kernel{}, std::forward<MatrixArg>(a),
+                  std::forward<VectorArg>(w), std::forward<EigenvectorsArg>(vectors));
   }
 
   /**
@@ -136,7 +166,7 @@ namespace cytnx {
   }
 
   /**
-   * @brief Compute the thin QR factorization of a real host layout-right mdspan matrix view.
+   * @brief Compute the thin QR factorization of a host layout-right mdspan matrix view.
    *
    * Variant arguments dispatch over alternatives and report an error if the active alternatives are
    * incompatible.
@@ -149,7 +179,7 @@ namespace cytnx {
   }
 
   /**
-   * @brief Compute the thin LQ factorization of a real host layout-right mdspan matrix view.
+   * @brief Compute the thin LQ factorization of a host layout-right mdspan matrix view.
    *
    * Variant arguments dispatch over alternatives and report an error if the active alternatives are
    * incompatible.

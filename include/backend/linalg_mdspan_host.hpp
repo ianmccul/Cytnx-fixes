@@ -35,6 +35,15 @@ namespace cytnx::linalg_mdspan_backend {
     static constexpr std::string_view name = "eig_values";
   };
 
+  struct self_adjoint_eigh_vectors_kernel {
+    static constexpr std::string_view name = "self_adjoint_eigh_vectors";
+    char uplo = 'U';
+  };
+
+  struct eig_right_vectors_kernel {
+    static constexpr std::string_view name = "eig_right_vectors";
+  };
+
   struct symmetric_tridiagonal_eigh_values_kernel {
     static constexpr std::string_view name = "symmetric_tridiagonal_eigh_values";
   };
@@ -89,10 +98,27 @@ namespace cytnx::linalg_mdspan_backend {
     lapack::self_adjoint_eigh(kernel.jobz, kernel.uplo, matrix, values);
   }
 
+  template <lapack::MutableLapackMatrix Matrix, lapack::MutableRealLapackVector Vector,
+            lapack::MutableLapackMatrix Eigenvectors>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+             mdspan_concepts::SameElementType<Matrix, Eigenvectors>
+  void run_kernel(self_adjoint_eigh_vectors_kernel kernel, Matrix matrix, Vector values,
+                  Eigenvectors vectors) {
+    lapack::self_adjoint_eigh_vectors(kernel.uplo, matrix, values, vectors);
+  }
+
   template <lapack::MutableLapackMatrix Matrix, lapack::MutableComplexLapackVector Vector>
     requires lapack::LapackEigenvalueVector<Matrix, Vector>
   void run_kernel(eig_values_kernel, Matrix matrix, Vector values) {
     lapack::eig_values(matrix, values);
+  }
+
+  template <lapack::LapackMatrix Matrix, lapack::MutableComplexLapackVector Vector,
+            lapack::MutableComplexLapackMatrix Eigenvectors>
+    requires lapack::LapackEigenvalueVector<Matrix, Vector> &&
+             lapack::LapackEigenvectorMatrix<Matrix, Eigenvectors>
+  void run_kernel(eig_right_vectors_kernel, Matrix matrix, Vector values, Eigenvectors vectors) {
+    lapack::eig_right_vectors(matrix, values, vectors);
   }
 
   template <lapack::MutableRealLapackVector Diagonal, lapack::MutableRealLapackVector OffDiagonal>

@@ -149,6 +149,23 @@ namespace {
     }
   }
 
+  template <class MatrixScalar, class VectorScalar, class EigenvalueScalar, class Real>
+  void expect_right_eigenvectors(const std::vector<MatrixScalar> &matrix,
+                                 const std::vector<EigenvalueScalar> &values,
+                                 const std::vector<VectorScalar> &vectors, std::size_t n,
+                                 Real tolerance) {
+    for (std::size_t eig = 0; eig < n; ++eig) {
+      for (std::size_t row = 0; row < n; ++row) {
+        std::complex<Real> applied{};
+        for (std::size_t col = 0; col < n; ++col) {
+          applied += matrix[row * n + col] * vectors[eig * n + col];
+        }
+        const auto expected = values[eig] * vectors[eig * n + row];
+        EXPECT_NEAR(std::abs(applied - expected), Real{}, tolerance);
+      }
+    }
+  }
+
   static_assert(cytnx::Variant<std::variant<DispatchA, DispatchC>>);
   static_assert(
     cytnx::AnyDispatchInvocable<DispatchKernel, std::variant<DispatchC, DispatchA> &, DispatchB &>);
@@ -643,6 +660,27 @@ namespace {
     EXPECT_NEAR(w[1], 3.0, 1e-12);
   }
 
+  TEST(LapackMdspanTest, SelfAdjointEighVectorsWritesEigenvectorsAsRows) {
+    using complex = std::complex<double>;
+    const std::vector<complex> original = {
+      complex{2.0, 0.0},
+      complex{0.0, 1.0},
+      complex{0.0, -1.0},
+      complex{2.0, 0.0},
+    };
+    std::vector<complex> a = original;
+    std::vector<double> w(2);
+    std::vector<complex> vectors(2 * 2);
+
+    cytnx::self_adjoint_eigh_vectors('U', matrix_view<complex>(a.data(), 2, 2),
+                                     vector_view<double>(w.data(), 2),
+                                     matrix_view<complex>(vectors.data(), 2, 2));
+
+    EXPECT_NEAR(w[0], 1.0, 1e-12);
+    EXPECT_NEAR(w[1], 3.0, 1e-12);
+    expect_right_eigenvectors(original, w, vectors, 2, 1e-12);
+  }
+
   TEST(LapackMdspanTest, CheckedGeevWrapperComputesEigenvalues) {
     using complex = std::complex<double>;
     std::vector<double> a = {
@@ -658,6 +696,48 @@ namespace {
 
     EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, 2.0}, 1e-12));
     EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, -2.0}, 1e-12));
+  }
+
+  TEST(LapackMdspanTest, EigRightVectorsPromotesRealInputToComplex) {
+    using complex = std::complex<double>;
+    const std::vector<double> original = {
+      0.0,
+      -2.0,
+      2.0,
+      0.0,
+    };
+    std::vector<double> a = original;
+    std::vector<complex> w(2);
+    std::vector<complex> vectors(2 * 2);
+
+    cytnx::eig_right_vectors(matrix_view<const double>(a.data(), 2, 2),
+                             vector_view<complex>(w.data(), 2),
+                             matrix_view<complex>(vectors.data(), 2, 2));
+
+    EXPECT_EQ(a, original);
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, 2.0}, 1e-12));
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, -2.0}, 1e-12));
+    expect_right_eigenvectors(original, w, vectors, 2, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, EigRightVectorsSupportsComplexInput) {
+    using complex = std::complex<double>;
+    const std::vector<complex> original = {
+      complex{1.0, 2.0},
+      complex{0.0, 0.0},
+      complex{0.0, 0.0},
+      complex{3.0, -1.0},
+    };
+    std::vector<complex> w(2);
+    std::vector<complex> vectors(2 * 2);
+
+    cytnx::eig_right_vectors(matrix_view<const complex>(original.data(), 2, 2),
+                             vector_view<complex>(w.data(), 2),
+                             matrix_view<complex>(vectors.data(), 2, 2));
+
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{1.0, 2.0}, 1e-12));
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{3.0, -1.0}, 1e-12));
+    expect_right_eigenvectors(original, w, vectors, 2, 1e-12);
   }
 
   TEST(LapackMdspanTest, CheckedStevWrapperComputesSymmetricTridiagonalEigenvalues) {
