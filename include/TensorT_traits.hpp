@@ -169,13 +169,11 @@ namespace cytnx {
    * @brief True if at least one Cartesian product of dispatch alternatives is invocable by `F`.
    *
    * Each argument type may be a concrete type or a `std::variant`; non-variants are treated as
-   * single-alternative dispatch arguments. At least one argument must be a variant.
+   * single-alternative dispatch arguments.
    */
   template <class F, class... Args>
-  concept AnyDispatchInvocable =
-    (Variant<Args> || ...) &&
-    tensor_t_detail::any_dispatch_invocable<
-      F, std::tuple<>, tensor_t_detail::dispatch_alternatives_t<Args>...>::value;
+  concept AnyDispatchInvocable = tensor_t_detail::any_dispatch_invocable<
+    F, std::tuple<>, tensor_t_detail::dispatch_alternatives_t<Args>...>::value;
 
   namespace tensor_t_detail {
 
