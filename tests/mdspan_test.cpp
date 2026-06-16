@@ -19,6 +19,8 @@ namespace {
   using right_vector = mdspan<double, extents<std::size_t, dynamic_extent>>;
 
   static_assert(cytnx::mdspan_concepts::MdspanView<right_matrix>);
+  static_assert(cytnx::mdspan_concepts::HostAccessor<cytnx::stdex::default_accessor<int>>);
+  static_assert(cytnx::mdspan_concepts::HostAccessible<right_matrix>);
   static_assert(cytnx::mdspan_concepts::Matrix<right_matrix>);
   static_assert(cytnx::mdspan_concepts::LayoutRight<right_matrix>);
   static_assert(cytnx::mdspan_concepts::LayoutRightMatrix<right_matrix>);

@@ -65,7 +65,10 @@ namespace cytnx {
     using extents_type = stdex::dextents<std::size_t, Rank>;
     using view_type = stdex::mdspan<T, extents_type, Layout>;
     using mapping_type = typename view_type::mapping_type;
+    using accessor_type = typename view_type::accessor_type;
     using owner_type = data_owner<T>;
+    using data_handle_type = typename view_type::data_handle_type;
+    using reference = typename view_type::reference;
 
     static constexpr std::size_t rank() noexcept { return Rank; }
 
@@ -99,6 +102,7 @@ namespace cytnx {
     T *data_handle() const noexcept { return view_.data_handle(); }
 
     const view_type &view() const noexcept { return view_; }
+    const accessor_type &accessor() const noexcept { return view_.accessor(); }
     const owner_type &owner() const noexcept { return owner_; }
     const Access &access() const noexcept { return access_; }
 

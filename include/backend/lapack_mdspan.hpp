@@ -16,10 +16,6 @@
 
 #ifndef BACKEND_TORCH
 
-namespace cytnx {
-  struct host_access;
-}
-
 namespace cytnx::lapack::fortran {
 
   // The raw Fortran ABI is isolated here. LAPACK routines with character arguments may need
@@ -85,20 +81,6 @@ namespace cytnx::lapack {
       return uplo;
     }
 
-    template <class View, class = void>
-    struct access_policy {
-      using type = void;
-    };
-
-    template <class View>
-    struct access_policy<View, std::void_t<typename View::access_type>> {
-      using type = typename View::access_type;
-    };
-
-    template <class View>
-    concept HostAccessible = std::same_as<typename access_policy<View>::type, void> ||
-                             std::same_as<typename access_policy<View>::type, host_access>;
-
   }  // namespace detail
 
   template <class T>
@@ -114,7 +96,8 @@ namespace cytnx::lapack {
 
   template <class View>
   concept LapackVector =
-    mdspan_concepts::LayoutRightVector<View> && LapackScalar<typename View::element_type>;
+    mdspan_concepts::LayoutRightVector<View> && mdspan_concepts::HostAccessible<View> &&
+    LapackScalar<typename View::element_type>;
 
   template <class View>
   concept RealLapackVector = LapackVector<View> && RealLapackScalar<typename View::element_type>;
@@ -125,7 +108,8 @@ namespace cytnx::lapack {
 
   template <class View>
   concept LapackMatrix =
-    mdspan_concepts::LayoutRightMatrix<View> && LapackScalar<typename View::element_type>;
+    mdspan_concepts::LayoutRightMatrix<View> && mdspan_concepts::HostAccessible<View> &&
+    LapackScalar<typename View::element_type>;
 
   template <class View>
   concept RealLapackMatrix = LapackMatrix<View> && RealLapackScalar<typename View::element_type>;
@@ -206,8 +190,7 @@ namespace cytnx::lapack {
     }  // namespace native
 
     template <LapackMatrix Matrix, RealLapackVector Vector>
-      requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
-               SameElementType<Vector, RealElementOf<Matrix>>
+      requires SameElementType<Vector, RealElementOf<Matrix>>
     int gesvd(Matrix a, Vector s) {
       using scalar_type = typename Matrix::element_type;
       using real_type = detail::real_scalar_t<scalar_type>;
@@ -252,10 +235,7 @@ namespace cytnx::lapack {
 
     template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
               LapackMatrix RightSingularVectors>
-      requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
-               detail::HostAccessible<LeftSingularVectors> &&
-               detail::HostAccessible<RightSingularVectors> &&
-               SameElementType<Vector, RealElementOf<Matrix>> &&
+      requires SameElementType<Vector, RealElementOf<Matrix>> &&
                SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
     int gesvd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
       using scalar_type = typename Matrix::element_type;
@@ -309,8 +289,7 @@ namespace cytnx::lapack {
     }
 
     template <LapackMatrix Matrix, RealLapackVector Vector>
-      requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
-               SameElementType<Vector, RealElementOf<Matrix>>
+      requires SameElementType<Vector, RealElementOf<Matrix>>
     int eigh(char jobz, char uplo, Matrix a, Vector w) {
       using scalar_type = typename Matrix::element_type;
       using real_type = detail::real_scalar_t<scalar_type>;
@@ -400,8 +379,7 @@ namespace cytnx::lapack {
    * @brief Compute singular values with checked host LAPACK diagnostics.
    */
   template <LapackMatrix Matrix, RealLapackVector Vector>
-    requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
-             SameElementType<Vector, RealElementOf<Matrix>>
+    requires SameElementType<Vector, RealElementOf<Matrix>>
   void svd_values(Matrix a, Vector s) {
     detail::check_lapack_info("gesvd", lowlevel::gesvd(a, s), a, s);
   }
@@ -411,10 +389,7 @@ namespace cytnx::lapack {
    */
   template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
             LapackMatrix RightSingularVectors>
-    requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
-             detail::HostAccessible<LeftSingularVectors> &&
-             detail::HostAccessible<RightSingularVectors> &&
-             SameElementType<Vector, RealElementOf<Matrix>> &&
+    requires SameElementType<Vector, RealElementOf<Matrix>> &&
              SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
   void svd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
     detail::check_lapack_info("gesvd", lowlevel::gesvd(a, s, u, vt), a, s, u, vt);
@@ -425,8 +400,7 @@ namespace cytnx::lapack {
    * diagnostics.
    */
   template <LapackMatrix Matrix, RealLapackVector Vector>
-    requires detail::HostAccessible<Matrix> && detail::HostAccessible<Vector> &&
-             SameElementType<Vector, RealElementOf<Matrix>>
+    requires SameElementType<Vector, RealElementOf<Matrix>>
   void self_adjoint_eigh(char jobz, char uplo, Matrix a, Vector w) {
     detail::check_lapack_info("eigh", lowlevel::eigh(jobz, uplo, a, w), a, w);
   }

@@ -194,30 +194,64 @@ namespace cytnx {
       using mapping = layout_stride_mapping<Extents>;
     };
 
-    template <class ElementType, class Extents, class LayoutPolicy = layout_right>
+    template <class ElementType>
+    class default_accessor {
+     public:
+      using element_type = ElementType;
+      using data_handle_type = element_type*;
+      using reference = element_type&;
+
+      constexpr reference access(data_handle_type ptr, std::size_t offset) const noexcept {
+        return ptr[offset];
+      }
+
+      constexpr data_handle_type offset(data_handle_type ptr, std::size_t offset) const noexcept {
+        return ptr + offset;
+      }
+    };
+
+    template <class ElementType, class Extents, class LayoutPolicy = layout_right,
+              class AccessorPolicy = default_accessor<ElementType>>
     class mdspan {
      public:
       using element_type = ElementType;
       using extents_type = Extents;
       using layout_type = LayoutPolicy;
+      using accessor_type = AccessorPolicy;
       using mapping_type = typename layout_type::template mapping<extents_type>;
       using index_type = typename extents_type::index_type;
       using rank_type = typename extents_type::rank_type;
-      using data_handle_type = element_type*;
-      using reference = element_type&;
+      using data_handle_type = typename accessor_type::data_handle_type;
+      using reference = typename accessor_type::reference;
 
       constexpr mdspan() noexcept = default;
 
       constexpr mdspan(data_handle_type ptr, const mapping_type& mapping) noexcept
           : ptr_(ptr), mapping_(mapping) {}
 
+      constexpr mdspan(data_handle_type ptr, const mapping_type& mapping,
+                       const accessor_type& accessor) noexcept
+          : ptr_(ptr), mapping_(mapping), accessor_(accessor) {}
+
       explicit constexpr mdspan(data_handle_type ptr, const extents_type& extents) noexcept
           : ptr_(ptr), mapping_(extents) {}
+
+      constexpr mdspan(data_handle_type ptr, const extents_type& extents,
+                       const accessor_type& accessor) noexcept
+          : ptr_(ptr), mapping_(extents), accessor_(accessor) {}
 
       template <class... IndexTypes,
                 std::enable_if_t<sizeof...(IndexTypes) == extents_type::rank_dynamic(), int> = 0>
       explicit constexpr mdspan(data_handle_type ptr, IndexTypes... dynamic_extents) noexcept
           : ptr_(ptr), mapping_(extents_type(static_cast<index_type>(dynamic_extents)...)) {}
+
+      template <class... IndexTypes,
+                std::enable_if_t<sizeof...(IndexTypes) == extents_type::rank_dynamic(), int> = 0>
+      constexpr mdspan(data_handle_type ptr, const accessor_type& accessor,
+                       IndexTypes... dynamic_extents) noexcept
+          : ptr_(ptr),
+            mapping_(extents_type(static_cast<index_type>(dynamic_extents)...)),
+            accessor_(accessor) {}
 
       static constexpr rank_type rank() noexcept { return extents_type::rank(); }
       static constexpr rank_type rank_dynamic() noexcept { return extents_type::rank_dynamic(); }
@@ -228,6 +262,7 @@ namespace cytnx {
       constexpr index_type stride(rank_type r) const noexcept { return mapping_.stride(r); }
       constexpr data_handle_type data_handle() const noexcept { return ptr_; }
       constexpr const mapping_type& mapping() const noexcept { return mapping_; }
+      constexpr const accessor_type& accessor() const noexcept { return accessor_; }
       constexpr index_type required_span_size() const noexcept {
         return mapping_.required_span_size();
       }
@@ -235,12 +270,13 @@ namespace cytnx {
       template <class... Indices>
       constexpr reference operator()(Indices... indices) const noexcept {
         static_assert(sizeof...(Indices) == rank(), "incorrect number of mdspan indices");
-        return ptr_[mapping_(static_cast<index_type>(indices)...)];
+        return accessor_.access(ptr_, mapping_(static_cast<index_type>(indices)...));
       }
 
      private:
       data_handle_type ptr_ = nullptr;
       mapping_type mapping_{};
+      [[no_unique_address]] accessor_type accessor_{};
     };
 
   }  // namespace stdex
