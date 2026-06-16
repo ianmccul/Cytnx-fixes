@@ -17,28 +17,6 @@ namespace cytnx {
 
   namespace linalg_mdspan_detail {
 
-    template <class View>
-    struct is_tensor_t : std::false_type {};
-
-    template <class T, std::size_t Rank, class Access, class Layout>
-    struct is_tensor_t<TensorT<T, Rank, Access, Layout>> : std::true_type {};
-
-    template <class View>
-    concept TensorTView = is_tensor_t<std::remove_cvref_t<View>>::value;
-
-    template <class View>
-    struct tensor_t_access;
-
-    template <class T, std::size_t Rank, class Access, class Layout>
-    struct tensor_t_access<TensorT<T, Rank, Access, Layout>> {
-      using type = Access;
-    };
-
-    template <class View>
-    concept HostTensorTView =
-      TensorTView<View> &&
-      std::same_as<typename tensor_t_access<std::remove_cvref_t<View>>::type, host_access>;
-
     template <class T>
     struct is_variant : std::false_type {};
 
@@ -49,25 +27,21 @@ namespace cytnx {
     concept Variant = is_variant<std::remove_cvref_t<T>>::value;
 
     template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-      requires HostTensorTView<Matrix> && HostTensorTView<Vector> &&
-               lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>>
+      requires lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>>
     void svd_values_impl(Matrix a, Vector s) {
       lapack::svd_values(a, s);
     }
 
     template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector,
               lapack::LapackMatrix LeftSingularVectors, lapack::LapackMatrix RightSingularVectors>
-      requires HostTensorTView<Matrix> && HostTensorTView<Vector> &&
-               HostTensorTView<LeftSingularVectors> && HostTensorTView<RightSingularVectors> &&
-               lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>> &&
+      requires lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>> &&
                lapack::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
     void svd_impl(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
       lapack::svd(a, s, u, vt);
     }
 
     template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-      requires HostTensorTView<Matrix> && HostTensorTView<Vector> &&
-               lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>>
+      requires lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>>
     void self_adjoint_eigh_impl(char jobz, char uplo, Matrix a, Vector w) {
       lapack::self_adjoint_eigh(jobz, uplo, a, w);
     }
@@ -75,10 +49,10 @@ namespace cytnx {
   }  // namespace linalg_mdspan_detail
 
   /**
-   * @brief Compute singular values of a host layout-right TensorT matrix view.
+   * @brief Compute singular values of a host layout-right mdspan matrix view.
    *
-   * This is the TensorT-facing dispatch layer. Host TensorT views call the checked LAPACK backend;
-   * CUDA overloads can be added here without exposing CUDA details to callers.
+   * Host-accessible mdspan views call the checked LAPACK backend. CUDA overloads can be added here
+   * without exposing CUDA details to callers.
    */
   template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
     requires requires(Matrix a, Vector s) { linalg_mdspan_detail::svd_values_impl(a, s); }
@@ -105,11 +79,10 @@ namespace cytnx {
   }
 
   /**
-   * @brief Compute the thin singular value decomposition of a host layout-right TensorT matrix
-   * view.
+   * @brief Compute the thin singular value decomposition of a host layout-right mdspan matrix view.
    *
-   * `a` is overwritten by the backend. Host TensorT views call the checked LAPACK backend; CUDA
-   * overloads can be added here with the same contract.
+   * `a` is overwritten by the backend. Host-accessible mdspan views call the checked LAPACK
+   * backend; CUDA overloads can be added here with the same contract.
    */
   template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector,
             lapack::LapackMatrix LeftSingularVectors, lapack::LapackMatrix RightSingularVectors>

@@ -193,6 +193,21 @@ namespace {
     EXPECT_NEAR(s.at<double>({1}), 3.0, 1e-12);
   }
 
+  TEST(LapackMdspanTest, PublicSvdValuesAcceptsRawHostMdspans) {
+    std::vector<double> a = {
+      1.0,
+      2.0,
+      3.0,
+      4.0,
+    };
+    std::vector<double> s(2);
+
+    cytnx::svd_values(matrix_view<double>(a.data(), 2, 2), vector_view<double>(s.data(), 2));
+
+    EXPECT_NEAR(s[0], 5.464985704219043, 1e-12);
+    EXPECT_NEAR(s[1], 0.365966190626257, 1e-12);
+  }
+
 }  // namespace
 
 #endif  // BACKEND_TORCH
