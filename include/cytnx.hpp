@@ -13,6 +13,7 @@
 #include "Tensor.hpp"
 #include "TensorT.hpp"
 #include "TensorT_traits.hpp"
+#include "linalg_mdspan.hpp"
 #include "Generator.hpp"
 #include "Physics.hpp"
 #include "algo.hpp"

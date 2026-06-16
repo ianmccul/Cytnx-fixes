@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
 
+#include "Generator.hpp"
+#include "TensorT_traits.hpp"
 #include "backend/lapack_mdspan.hpp"
+#include "linalg_mdspan.hpp"
 
 #include <cmath>
 #include <complex>
@@ -126,8 +129,8 @@ namespace {
     std::vector<double> u(2 * 2);
     std::vector<double> vt(2 * 3);
 
-    cytnx::lapack::svd(matrix_view<double>(a.data(), 2, 3), vector_view<double>(s.data(), 2),
-                       matrix_view<double>(u.data(), 2, 2), matrix_view<double>(vt.data(), 2, 3));
+    cytnx::svd(matrix_view<double>(a.data(), 2, 3), vector_view<double>(s.data(), 2),
+               matrix_view<double>(u.data(), 2, 2), matrix_view<double>(vt.data(), 2, 3));
 
     for (std::size_t i = 0; i < 2; ++i) {
       for (std::size_t j = 0; j < 3; ++j) {
@@ -146,8 +149,7 @@ namespace {
     };
     std::vector<double> s(2);
 
-    cytnx::lapack::svd_values(matrix_view<double>(a.data(), 2, 3),
-                              vector_view<double>(s.data(), 2));
+    cytnx::svd_values(matrix_view<double>(a.data(), 2, 3), vector_view<double>(s.data(), 2));
 
     EXPECT_NEAR(s[0], 4.0, 1e-12);
     EXPECT_NEAR(s[1], 3.0, 1e-12);
@@ -162,11 +164,26 @@ namespace {
     };
     std::vector<double> w(2);
 
-    cytnx::lapack::self_adjoint_eigh('N', 'U', matrix_view<double>(a.data(), 2, 2),
-                                     vector_view<double>(w.data(), 2));
+    cytnx::self_adjoint_eigh('N', 'U', matrix_view<double>(a.data(), 2, 2),
+                             vector_view<double>(w.data(), 2));
 
     EXPECT_NEAR(w[0], 1.0, 1e-12);
     EXPECT_NEAR(w[1], 3.0, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, VariantSvdValuesDispatchesTensorTAlternatives) {
+    cytnx::Tensor a = cytnx::zeros({2, 3}, cytnx::Type.Double);
+    a.at<double>({0, 0}) = 3.0;
+    a.at<double>({1, 1}) = 4.0;
+    cytnx::Tensor s = cytnx::zeros({2}, cytnx::Type.Double);
+
+    cytnx::RealTensor<2> a_view = cytnx::make_right_tensor_t<double, 2>(a);
+    cytnx::RealTensor<1> s_view = cytnx::make_right_tensor_t<double, 1>(s);
+
+    cytnx::svd_values(a_view, s_view);
+
+    EXPECT_NEAR(s.at<double>({0}), 4.0, 1e-12);
+    EXPECT_NEAR(s.at<double>({1}), 3.0, 1e-12);
   }
 
 }  // namespace

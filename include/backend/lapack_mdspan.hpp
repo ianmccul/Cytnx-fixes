@@ -7,7 +7,6 @@
 #include "mdspan_concepts.hpp"
 
 #include <algorithm>
-#include <cmath>
 #include <concepts>
 #include <complex>
 #include <limits>
@@ -124,49 +123,6 @@ namespace cytnx::lapack {
   struct RealElementOf {
     using element_type = detail::real_scalar_t<typename View::element_type>;
   };
-
-  namespace detail {
-
-    template <class T>
-    bool is_finite_scalar(const T &value) {
-      if constexpr (ComplexLapackScalar<T>) {
-        return std::isfinite(value.real()) && std::isfinite(value.imag());
-      } else {
-        return std::isfinite(value);
-      }
-    }
-
-    template <mdspan_concepts::MdspanView View>
-    std::size_t nonfinite_count(View view) {
-      static_assert(View::rank() == 1 || View::rank() == 2,
-                    "LAPACK diagnostics support vector and matrix views");
-      std::size_t count = 0;
-      if constexpr (View::rank() == 1) {
-        for (std::size_t i = 0; i < view.extent(0); ++i) {
-          if (!is_finite_scalar(view(i))) ++count;
-        }
-      } else {
-        for (std::size_t i = 0; i < view.extent(0); ++i) {
-          for (std::size_t j = 0; j < view.extent(1); ++j) {
-            if (!is_finite_scalar(view(i, j))) ++count;
-          }
-        }
-      }
-      return count;
-    }
-
-    template <mdspan_concepts::MdspanView... Views>
-    void check_lapack_info(const char *routine, int info, Views... views) {
-      if (info == 0) return;
-      const std::size_t count = (std::size_t{0} + ... + nonfinite_count(views));
-      cytnx_error_msg(
-        true,
-        "[ERROR] LAPACK %s failed with info = %d. Post-call diagnostic found %llu NaN/Inf "
-        "entries in checked arrays.%s",
-        routine, info, static_cast<unsigned long long>(count), "\n");
-    }
-
-  }  // namespace detail
 
   namespace native {
 
@@ -327,20 +283,6 @@ namespace cytnx::lapack {
 
   template <LapackMatrix Matrix, RealLapackVector Vector>
     requires SameElementType<Vector, RealElementOf<Matrix>>
-  void svd_values(Matrix a, Vector s) {
-    detail::check_lapack_info("gesvd", gesvd(a, s), a, s);
-  }
-
-  template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
-            LapackMatrix RightSingularVectors>
-    requires SameElementType<Vector, RealElementOf<Matrix>> &&
-             SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
-  void svd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
-    detail::check_lapack_info("gesvd", gesvd(a, s, u, vt), a, s, u, vt);
-  }
-
-  template <LapackMatrix Matrix, RealLapackVector Vector>
-    requires SameElementType<Vector, RealElementOf<Matrix>>
   int eigh(char jobz, char uplo, Matrix a, Vector w) {
     using scalar_type = typename Matrix::element_type;
     using real_type = detail::real_scalar_t<scalar_type>;
@@ -378,12 +320,6 @@ namespace cytnx::lapack {
     }
 
     return info;
-  }
-
-  template <LapackMatrix Matrix, RealLapackVector Vector>
-    requires SameElementType<Vector, RealElementOf<Matrix>>
-  void self_adjoint_eigh(char jobz, char uplo, Matrix a, Vector w) {
-    detail::check_lapack_info("eigh", eigh(jobz, uplo, a, w), a, w);
   }
 
 }  // namespace cytnx::lapack
