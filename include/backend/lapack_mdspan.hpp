@@ -54,6 +54,22 @@ namespace cytnx::lapack::fortran {
                std::complex<double> *vt, const blas_int *ldvt, std::complex<double> *work,
                const blas_int *lwork, double *rwork, blas_int *iwork, blas_int *info);
 
+  void sgelsd_(const blas_int *m, const blas_int *n, const blas_int *nrhs, float *a,
+               const blas_int *lda, float *b, const blas_int *ldb, float *s, const float *rcond,
+               blas_int *rank, float *work, const blas_int *lwork, blas_int *iwork, blas_int *info);
+  void dgelsd_(const blas_int *m, const blas_int *n, const blas_int *nrhs, double *a,
+               const blas_int *lda, double *b, const blas_int *ldb, double *s, const double *rcond,
+               blas_int *rank, double *work, const blas_int *lwork, blas_int *iwork,
+               blas_int *info);
+  void cgelsd_(const blas_int *m, const blas_int *n, const blas_int *nrhs, std::complex<float> *a,
+               const blas_int *lda, std::complex<float> *b, const blas_int *ldb, float *s,
+               const float *rcond, blas_int *rank, std::complex<float> *work, const blas_int *lwork,
+               float *rwork, blas_int *iwork, blas_int *info);
+  void zgelsd_(const blas_int *m, const blas_int *n, const blas_int *nrhs, std::complex<double> *a,
+               const blas_int *lda, std::complex<double> *b, const blas_int *ldb, double *s,
+               const double *rcond, blas_int *rank, std::complex<double> *work,
+               const blas_int *lwork, double *rwork, blas_int *iwork, blas_int *info);
+
   void ssyev_(const char *jobz, const char *uplo, const blas_int *n, float *a, const blas_int *lda,
               float *w, float *work, const blas_int *lwork, blas_int *info);
   void dsyev_(const char *jobz, const char *uplo, const blas_int *n, double *a, const blas_int *lda,
@@ -320,6 +336,38 @@ namespace cytnx::lapack {
                         const blas_int *ldvt, std::complex<double> *work, const blas_int *lwork,
                         double *rwork, blas_int *iwork, blas_int *info) {
         fortran::zgesdd_(jobz, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, iwork, info);
+      }
+
+      inline void gelsd(const blas_int *m, const blas_int *n, const blas_int *nrhs, float *a,
+                        const blas_int *lda, float *b, const blas_int *ldb, float *s,
+                        const float *rcond, blas_int *rank, float *work, const blas_int *lwork,
+                        blas_int *iwork, blas_int *info) {
+        fortran::sgelsd_(m, n, nrhs, a, lda, b, ldb, s, rcond, rank, work, lwork, iwork, info);
+      }
+
+      inline void gelsd(const blas_int *m, const blas_int *n, const blas_int *nrhs, double *a,
+                        const blas_int *lda, double *b, const blas_int *ldb, double *s,
+                        const double *rcond, blas_int *rank, double *work, const blas_int *lwork,
+                        blas_int *iwork, blas_int *info) {
+        fortran::dgelsd_(m, n, nrhs, a, lda, b, ldb, s, rcond, rank, work, lwork, iwork, info);
+      }
+
+      inline void gelsd(const blas_int *m, const blas_int *n, const blas_int *nrhs,
+                        std::complex<float> *a, const blas_int *lda, std::complex<float> *b,
+                        const blas_int *ldb, float *s, const float *rcond, blas_int *rank,
+                        std::complex<float> *work, const blas_int *lwork, float *rwork,
+                        blas_int *iwork, blas_int *info) {
+        fortran::cgelsd_(m, n, nrhs, a, lda, b, ldb, s, rcond, rank, work, lwork, rwork, iwork,
+                         info);
+      }
+
+      inline void gelsd(const blas_int *m, const blas_int *n, const blas_int *nrhs,
+                        std::complex<double> *a, const blas_int *lda, std::complex<double> *b,
+                        const blas_int *ldb, double *s, const double *rcond, blas_int *rank,
+                        std::complex<double> *work, const blas_int *lwork, double *rwork,
+                        blas_int *iwork, blas_int *info) {
+        fortran::zgelsd_(m, n, nrhs, a, lda, b, ldb, s, rcond, rank, work, lwork, rwork, iwork,
+                         info);
       }
 
       inline void syev(const char *jobz, const char *uplo, const blas_int *n, float *a,
@@ -724,6 +772,88 @@ namespace cytnx::lapack {
                       &lwork, rwork.data(), iwork.data(), &info);
       }
 
+      return info;
+    }
+
+    template <LapackMatrix Matrix, MutableLapackMatrix RightHandSide,
+              MutableRealLapackVector Vector>
+      requires mdspan_concepts::SameElementType<Matrix, RightHandSide> &&
+               mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+    int gelsd(Matrix a, RightHandSide b, Vector s, blas_int &rank,
+              mdspan_concepts::real_element_t<mdspan_concepts::element_value_t<Matrix>> rcond) {
+      using scalar_type = mdspan_concepts::element_value_t<Matrix>;
+      using real_type = mdspan_concepts::real_element_t<scalar_type>;
+
+      const auto rows = a.extent(0);
+      const auto cols = a.extent(1);
+      const auto rhs_count = b.extent(1);
+      const auto min_dim = std::min(rows, cols);
+      const auto max_dim = std::max(rows, cols);
+      cytnx_error_msg(b.extent(0) < max_dim,
+                      "[ERROR] LAPACK gelsd right-hand side matrix has too few rows.%s", "\n");
+      cytnx_error_msg(s.extent(0) < min_dim,
+                      "[ERROR] LAPACK gelsd singular-value output is too small.%s", "\n");
+
+      const blas_int native_m = detail::to_blas_int(rows, "rows");
+      const blas_int native_n = detail::to_blas_int(cols, "cols");
+      const blas_int native_nrhs = detail::to_blas_int(rhs_count, "rhs_count");
+      const blas_int lda = std::max<blas_int>(1, native_m);
+      const blas_int ldb = std::max<blas_int>(1, detail::to_blas_int(max_dim, "max_dim"));
+      blas_int info = 0;
+      blas_int lwork = -1;
+
+      std::vector<scalar_type> a_column_major(
+        std::max<std::size_t>(1, static_cast<std::size_t>(lda) * cols));
+      for (std::size_t i = 0; i < rows; ++i) {
+        for (std::size_t j = 0; j < cols; ++j) {
+          a_column_major[i + j * static_cast<std::size_t>(lda)] = a(i, j);
+        }
+      }
+
+      std::vector<scalar_type> b_column_major(
+        std::max<std::size_t>(1, static_cast<std::size_t>(ldb) * rhs_count));
+      for (std::size_t i = 0; i < max_dim; ++i) {
+        for (std::size_t j = 0; j < rhs_count; ++j) {
+          b_column_major[i + j * static_cast<std::size_t>(ldb)] = b(i, j);
+        }
+      }
+
+      if constexpr (RealLapackScalar<scalar_type>) {
+        scalar_type work_query{};
+        std::vector<blas_int> iwork(1);
+        native::gelsd(&native_m, &native_n, &native_nrhs, a_column_major.data(), &lda,
+                      b_column_major.data(), &ldb, s.data_handle(), &rcond, &rank, &work_query,
+                      &lwork, iwork.data(), &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+        iwork.assign(std::max<blas_int>(1, iwork[0]), blas_int{});
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::gelsd(&native_m, &native_n, &native_nrhs, a_column_major.data(), &lda,
+                      b_column_major.data(), &ldb, s.data_handle(), &rcond, &rank, work.data(),
+                      &lwork, iwork.data(), &info);
+      } else {
+        scalar_type work_query{};
+        std::vector<real_type> rwork(1);
+        std::vector<blas_int> iwork(1);
+        native::gelsd(&native_m, &native_n, &native_nrhs, a_column_major.data(), &lda,
+                      b_column_major.data(), &ldb, s.data_handle(), &rcond, &rank, &work_query,
+                      &lwork, rwork.data(), iwork.data(), &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
+        rwork.assign(std::max<blas_int>(1, static_cast<blas_int>(rwork[0])), real_type{});
+        iwork.assign(std::max<blas_int>(1, iwork[0]), blas_int{});
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::gelsd(&native_m, &native_n, &native_nrhs, a_column_major.data(), &lda,
+                      b_column_major.data(), &ldb, s.data_handle(), &rcond, &rank, work.data(),
+                      &lwork, rwork.data(), iwork.data(), &info);
+      }
+
+      if (info != 0) return info;
+      for (std::size_t i = 0; i < max_dim; ++i) {
+        for (std::size_t j = 0; j < rhs_count; ++j) {
+          b(i, j) = b_column_major[i + j * static_cast<std::size_t>(ldb)];
+        }
+      }
       return info;
     }
 
@@ -1140,6 +1270,24 @@ namespace cytnx::lapack {
              mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
   void svd_divide_conquer(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
     detail::check_lapack_info("gesdd", lowlevel::gesdd(a, s, u, vt), a, s, u, vt);
+  }
+
+  /**
+   * @brief Solve a least-squares problem with the divide-and-conquer SVD driver.
+   *
+   * `b` must have shape at least `(max(a.extent(0), a.extent(1)), nrhs)`. On return, the first
+   * `a.extent(1)` rows of `b` contain the solution.
+   */
+  template <LapackMatrix Matrix, MutableLapackMatrix RightHandSide, MutableRealLapackVector Vector,
+            class Rcond>
+    requires mdspan_concepts::SameElementType<Matrix, RightHandSide> &&
+             mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+             std::convertible_to<
+               Rcond, mdspan_concepts::real_element_t<mdspan_concepts::element_value_t<Matrix>>>
+  void least_squares(Matrix a, RightHandSide b, Vector s, blas_int &rank, Rcond rcond) {
+    using real_type = mdspan_concepts::real_element_t<mdspan_concepts::element_value_t<Matrix>>;
+    detail::check_lapack_info(
+      "gelsd", lowlevel::gelsd(a, b, s, rank, static_cast<real_type>(rcond)), a, b, s);
   }
 
   /**

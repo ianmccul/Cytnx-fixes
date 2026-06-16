@@ -80,6 +80,34 @@ namespace cytnx {
   }
 
   /**
+   * @brief Solve a least-squares problem using the divide-and-conquer SVD driver.
+   *
+   * `b` must have at least `max(a.extent(0), a.extent(1))` rows. On return, the first
+   * `a.extent(1)` rows of `b` contain the solution. `s` receives the singular values of `a`, and
+   * `rank` receives the effective numerical rank.
+   */
+  template <class MatrixArg, class RightHandSideArg, class SingularValuesArg, class Rcond>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::least_squares_kernel, MatrixArg,
+                                  RightHandSideArg, SingularValuesArg, blas_int &, Rcond>
+  void least_squares(MatrixArg &&a, RightHandSideArg &&b, SingularValuesArg &&s, blas_int &rank,
+                     Rcond rcond) {
+    invoke_kernel(linalg_mdspan_backend::least_squares_kernel{}, std::forward<MatrixArg>(a),
+                  std::forward<RightHandSideArg>(b), std::forward<SingularValuesArg>(s), rank,
+                  rcond);
+  }
+
+  /**
+   * @brief Solve a least-squares problem using LAPACK's default rank cutoff.
+   */
+  template <class MatrixArg, class RightHandSideArg, class SingularValuesArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::least_squares_kernel, MatrixArg,
+                                  RightHandSideArg, SingularValuesArg, blas_int &, double>
+  void least_squares(MatrixArg &&a, RightHandSideArg &&b, SingularValuesArg &&s, blas_int &rank) {
+    least_squares(std::forward<MatrixArg>(a), std::forward<RightHandSideArg>(b),
+                  std::forward<SingularValuesArg>(s), rank, -1.0);
+  }
+
+  /**
    * @brief Diagonalize a real symmetric or complex Hermitian host layout-right mdspan matrix view.
    *
    * The wrapper uses row-major logical indexing and translates the triangular `uplo` selector for

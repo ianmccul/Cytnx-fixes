@@ -530,6 +530,79 @@ namespace {
     }
   }
 
+  TEST(LapackMdspanTest, LeastSquaresSolvesOverdeterminedRealSystem) {
+    const std::vector<double> original = {
+      1.0, 0.0, 0.0, 1.0, 1.0, 1.0,
+    };
+    std::vector<double> a = original;
+    std::vector<double> b = {
+      2.0,
+      -1.0,
+      1.0,
+    };
+    std::vector<double> s(2);
+    blas_int rank = 0;
+
+    cytnx::least_squares(matrix_view<const double>(a.data(), 3, 2),
+                         matrix_view<double>(b.data(), 3, 1), vector_view<double>(s.data(), 2),
+                         rank);
+
+    EXPECT_EQ(a, original);
+    EXPECT_EQ(rank, 2);
+    EXPECT_NEAR(b[0], 2.0, 1e-12);
+    EXPECT_NEAR(b[1], -1.0, 1e-12);
+    EXPECT_GT(s[0], s[1]);
+    EXPECT_GT(s[1], 0.0);
+  }
+
+  TEST(LapackMdspanTest, LeastSquaresSolvesUnderdeterminedComplexSystem) {
+    using complex = std::complex<double>;
+    const std::vector<complex> original = {
+      complex{1.0, 0.0}, complex{0.0, 0.0}, complex{0.0, 0.0},
+      complex{0.0, 0.0}, complex{1.0, 0.0}, complex{0.0, 0.0},
+    };
+    std::vector<complex> b = {
+      complex{2.0, -1.0},
+      complex{-3.0, 0.5},
+      complex{99.0, 99.0},
+    };
+    std::vector<double> s(2);
+    blas_int rank = 0;
+
+    cytnx::lapack::least_squares(matrix_view<const complex>(original.data(), 2, 3),
+                                 matrix_view<complex>(b.data(), 3, 1),
+                                 vector_view<double>(s.data(), 2), rank, -1.0);
+
+    EXPECT_EQ(rank, 2);
+    EXPECT_NEAR(std::abs(b[0] - complex{2.0, -1.0}), 0.0, 1e-12);
+    EXPECT_NEAR(std::abs(b[1] - complex{-3.0, 0.5}), 0.0, 1e-12);
+    EXPECT_NEAR(std::abs(b[2]), 0.0, 1e-12);
+    EXPECT_NEAR(s[0], 1.0, 1e-12);
+    EXPECT_NEAR(s[1], 1.0, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, LeastSquaresRejectsTooSmallRightHandSideStorage) {
+    std::vector<double> a = {
+      1.0,
+      0.0,
+      0.0,
+      1.0,
+    };
+    std::vector<double> b(1);
+    std::vector<double> s(2);
+    blas_int rank = 0;
+
+    try {
+      cytnx::least_squares(matrix_view<double>(a.data(), 2, 2), matrix_view<double>(b.data(), 1, 1),
+                           vector_view<double>(s.data(), 2), rank);
+      FAIL() << "Expected too-small least-squares RHS storage to fail.";
+    } catch (const std::logic_error &err) {
+      const std::string message = err.what();
+      EXPECT_NE(message.find("LAPACK gelsd right-hand side matrix has too few rows"),
+                std::string::npos);
+    }
+  }
+
   TEST(LapackMdspanTest, QrFactorizesTallRealMatrix) {
     const std::vector<double> original = {
       1.0, 2.0, 3.0, 4.0, 5.0, 7.0,
@@ -842,6 +915,31 @@ namespace {
     EXPECT_NEAR(a.at<double>({0, 1}), -0.7, 1e-12);
     EXPECT_NEAR(a.at<double>({1, 0}), -0.2, 1e-12);
     EXPECT_NEAR(a.at<double>({1, 1}), 0.4, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, LeastSquaresDispatchesTensorTVariants) {
+    cytnx::Tensor a = cytnx::zeros({3, 2}, cytnx::Type.Double);
+    a.at<double>({0, 0}) = 1.0;
+    a.at<double>({1, 1}) = 1.0;
+    a.at<double>({2, 0}) = 1.0;
+    a.at<double>({2, 1}) = 1.0;
+    cytnx::Tensor b = cytnx::zeros({3, 1}, cytnx::Type.Double);
+    b.at<double>({0, 0}) = 2.0;
+    b.at<double>({1, 0}) = -1.0;
+    b.at<double>({2, 0}) = 1.0;
+    cytnx::Tensor s = cytnx::zeros({2}, cytnx::Type.Double);
+
+    cytnx::NumericTensor<2> a_view = cytnx::make_right_tensor_t<double, 2>(a);
+    cytnx::NumericTensor<2> b_view = cytnx::make_right_tensor_t<double, 2>(b);
+    cytnx::RealTensor<1> s_view = cytnx::make_right_tensor_t<double, 1>(s);
+    blas_int rank = 0;
+
+    cytnx::least_squares(a_view, b_view, s_view, rank);
+
+    EXPECT_EQ(rank, 2);
+    EXPECT_NEAR(b.at<double>({0, 0}), 2.0, 1e-12);
+    EXPECT_NEAR(b.at<double>({1, 0}), -1.0, 1e-12);
+    EXPECT_GT(s.at<double>({0}), s.at<double>({1}));
   }
 
   TEST(LapackMdspanTest, PublicSvdValuesAcceptsRawHostMdspans) {

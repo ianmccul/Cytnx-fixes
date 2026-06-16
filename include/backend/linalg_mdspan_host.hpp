@@ -25,6 +25,10 @@ namespace cytnx::linalg_mdspan_backend {
     static constexpr std::string_view name = "svd_divide_conquer";
   };
 
+  struct least_squares_kernel {
+    static constexpr std::string_view name = "least_squares";
+  };
+
   struct self_adjoint_eigh_kernel {
     static constexpr std::string_view name = "self_adjoint_eigh";
     char jobz = 'N';
@@ -90,6 +94,17 @@ namespace cytnx::linalg_mdspan_backend {
   void run_kernel(svd_divide_conquer_kernel, Matrix matrix, Vector values, LeftSingularVectors left,
                   RightSingularVectors right) {
     lapack::svd_divide_conquer(matrix, values, left, right);
+  }
+
+  template <lapack::LapackMatrix Matrix, lapack::MutableLapackMatrix RightHandSide,
+            lapack::MutableRealLapackVector Vector, class Rcond>
+    requires mdspan_concepts::SameElementType<Matrix, RightHandSide> &&
+             mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+             std::convertible_to<
+               Rcond, mdspan_concepts::real_element_t<mdspan_concepts::element_value_t<Matrix>>>
+  void run_kernel(least_squares_kernel, Matrix matrix, RightHandSide rhs, Vector values,
+                  blas_int &rank, Rcond rcond) {
+    lapack::least_squares(matrix, rhs, values, rank, rcond);
   }
 
   template <lapack::MutableLapackMatrix Matrix, lapack::MutableRealLapackVector Vector>
