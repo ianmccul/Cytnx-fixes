@@ -3,6 +3,7 @@
 
 #include "TensorT.hpp"
 #include "Type.hpp"
+#include "mdspan_concepts.hpp"
 
 #include <concepts>
 #include <tuple>
@@ -121,18 +122,17 @@ namespace cytnx {
       using traits = tensor_t_alternative<Alternative>;
       using element_type = typename traits::element_type;
       using access_type = typename traits::access_type;
-      using layout_type = typename traits::layout_type;
 
-      if constexpr (std::same_as<layout_type, stdex::layout_right>) {
+      if constexpr (mdspan_concepts::LayoutRight<Alternative>) {
         Tensor tensor = input.contiguous();
         out = make_right_tensor_t<element_type, traits::rank, access_type>(tensor);
-      } else if constexpr (std::same_as<layout_type, stdex::layout_stride>) {
+      } else if constexpr (mdspan_concepts::LayoutStride<Alternative>) {
         Tensor tensor = input;
         out = make_tensor_t<element_type, traits::rank, access_type>(tensor);
       } else {
-        static_assert(std::same_as<layout_type, stdex::layout_right> ||
-                        std::same_as<layout_type, stdex::layout_stride>,
-                      "Unsupported TensorT layout for make_tensor");
+        static_assert(
+          mdspan_concepts::LayoutRight<Alternative> || mdspan_concepts::LayoutStride<Alternative>,
+          "Unsupported TensorT layout for make_tensor");
       }
       return true;
     }

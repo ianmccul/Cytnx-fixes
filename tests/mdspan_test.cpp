@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "mdspan_concepts.hpp"
 #include "mdspan.hpp"
 
 #include <array>
@@ -12,6 +13,18 @@ namespace {
   using cytnx::stdex::layout_right;
   using cytnx::stdex::layout_stride;
   using cytnx::stdex::mdspan;
+
+  using right_matrix = mdspan<int, extents<std::size_t, 2, 3>>;
+  using stride_matrix = mdspan<int, extents<std::size_t, 2, 3>, layout_stride>;
+  using right_vector = mdspan<double, extents<std::size_t, dynamic_extent>>;
+
+  static_assert(cytnx::mdspan_concepts::MdspanView<right_matrix>);
+  static_assert(cytnx::mdspan_concepts::Matrix<right_matrix>);
+  static_assert(cytnx::mdspan_concepts::LayoutRight<right_matrix>);
+  static_assert(cytnx::mdspan_concepts::LayoutRightMatrix<right_matrix>);
+  static_assert(cytnx::mdspan_concepts::LayoutStride<stride_matrix>);
+  static_assert(cytnx::mdspan_concepts::Vector<right_vector>);
+  static_assert(cytnx::mdspan_concepts::LayoutRightVector<right_vector>);
 
   TEST(MdspanTest, StaticExtentsLayoutRightIndexing) {
     std::array<int, 6> data{0, 1, 2, 3, 4, 5};

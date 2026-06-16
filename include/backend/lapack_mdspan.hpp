@@ -4,6 +4,7 @@
 #include "Type.hpp"
 #include "cytnx_error.hpp"
 #include "mdspan.hpp"
+#include "mdspan_concepts.hpp"
 
 #include <algorithm>
 #include <concepts>
@@ -66,54 +67,6 @@ namespace cytnx::lapack {
     template <class T>
     using real_scalar_t = typename real_scalar<std::remove_cv_t<T>>::type;
 
-    template <class T>
-    concept RealLapackScalar =
-      std::is_same_v<std::remove_cv_t<T>, float> || std::is_same_v<std::remove_cv_t<T>, double>;
-
-    template <class T>
-    concept LapackScalar =
-      std::is_same_v<std::remove_cv_t<T>, float> || std::is_same_v<std::remove_cv_t<T>, double> ||
-      std::is_same_v<std::remove_cv_t<T>, std::complex<float>> ||
-      std::is_same_v<std::remove_cv_t<T>, std::complex<double>>;
-
-    template <class View>
-    concept MdspanView = requires(View view) {
-      typename View::element_type;
-      typename View::layout_type;
-      { View::rank() } -> std::convertible_to<std::size_t>;
-      { view.extent(std::size_t{}) } -> std::convertible_to<std::size_t>;
-      { view.data_handle() } -> std::convertible_to<typename View::element_type *>;
-    };
-
-    template <class View>
-    concept LayoutRightVector = MdspanView<View> && View::rank() == 1 &&
-                                std::is_same_v<typename View::layout_type, stdex::layout_right>;
-
-    template <class View>
-    concept LayoutRightMatrix = MdspanView<View> && View::rank() == 2 &&
-                                std::is_same_v<typename View::layout_type, stdex::layout_right>;
-
-    template <class View>
-    concept LapackMatrix = LayoutRightMatrix<View> && LapackScalar<typename View::element_type>;
-
-    template <class Vector, class Scalar>
-    concept RealVectorFor = LayoutRightVector<Vector> &&
-                            std::same_as<typename Vector::element_type, real_scalar_t<Scalar>>;
-
-    template <class Matrix, class Vector>
-    concept GesvdValuesArgs =
-      LapackMatrix<Matrix> && RealVectorFor<Vector, typename Matrix::element_type>;
-
-    template <class Matrix, class Vector, class LeftSingularVectors, class RightSingularVectors>
-    concept GesvdThinArgs =
-      GesvdValuesArgs<Matrix, Vector> && LayoutRightMatrix<LeftSingularVectors> &&
-      LayoutRightMatrix<RightSingularVectors> &&
-      std::same_as<typename LeftSingularVectors::element_type, typename Matrix::element_type> &&
-      std::same_as<typename RightSingularVectors::element_type, typename Matrix::element_type>;
-
-    template <class Matrix, class Vector>
-    concept EighArgs = LapackMatrix<Matrix> && RealVectorFor<Vector, typename Matrix::element_type>;
-
     inline blas_int to_blas_int(std::size_t value, const char *name) {
       cytnx_error_msg(value > static_cast<std::size_t>(std::numeric_limits<blas_int>::max()),
                       "[ERROR] LAPACK dimension %s exceeds blas_int range.%s", name, "\n");
@@ -128,6 +81,39 @@ namespace cytnx::lapack {
     }
 
   }  // namespace detail
+
+  template <class T>
+  concept RealLapackScalar =
+    std::is_same_v<std::remove_cv_t<T>, float> || std::is_same_v<std::remove_cv_t<T>, double>;
+
+  template <class T>
+  concept LapackScalar =
+    std::is_same_v<std::remove_cv_t<T>, float> || std::is_same_v<std::remove_cv_t<T>, double> ||
+    std::is_same_v<std::remove_cv_t<T>, std::complex<float>> ||
+    std::is_same_v<std::remove_cv_t<T>, std::complex<double>>;
+
+  template <class View>
+  concept LapackMatrix =
+    mdspan_concepts::LayoutRightMatrix<View> && LapackScalar<typename View::element_type>;
+
+  template <class Vector, class Scalar>
+  concept RealVectorFor =
+    mdspan_concepts::LayoutRightVector<Vector> &&
+    std::same_as<typename Vector::element_type, detail::real_scalar_t<Scalar>>;
+
+  template <class Matrix, class Vector>
+  concept GesvdValuesArgs =
+    LapackMatrix<Matrix> && RealVectorFor<Vector, typename Matrix::element_type>;
+
+  template <class Matrix, class Vector, class LeftSingularVectors, class RightSingularVectors>
+  concept GesvdThinArgs =
+    GesvdValuesArgs<Matrix, Vector> && mdspan_concepts::LayoutRightMatrix<LeftSingularVectors> &&
+    mdspan_concepts::LayoutRightMatrix<RightSingularVectors> &&
+    std::same_as<typename LeftSingularVectors::element_type, typename Matrix::element_type> &&
+    std::same_as<typename RightSingularVectors::element_type, typename Matrix::element_type>;
+
+  template <class Matrix, class Vector>
+  concept EighArgs = LapackMatrix<Matrix> && RealVectorFor<Vector, typename Matrix::element_type>;
 
   namespace native {
 
@@ -189,8 +175,8 @@ namespace cytnx::lapack {
 
   namespace row_major {
 
-    template <class Matrix, class Vector>
-      requires detail::GesvdValuesArgs<Matrix, Vector>
+    template <LapackMatrix Matrix, mdspan_concepts::LayoutRightVector Vector>
+      requires GesvdValuesArgs<Matrix, Vector>
     int gesvd(Matrix a, Vector s) {
       using scalar_type = typename Matrix::element_type;
       using real_type = detail::real_scalar_t<scalar_type>;
@@ -208,7 +194,7 @@ namespace cytnx::lapack {
       blas_int info = 0;
       blas_int lwork = -1;
 
-      if constexpr (detail::RealLapackScalar<scalar_type>) {
+      if constexpr (RealLapackScalar<scalar_type>) {
         scalar_type work_query{};
         native::gesvd("N", "N", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
                       nullptr, &one, nullptr, &one, &work_query, &lwork, &info);
@@ -233,8 +219,10 @@ namespace cytnx::lapack {
       return info;
     }
 
-    template <class Matrix, class Vector, class LeftSingularVectors, class RightSingularVectors>
-      requires detail::GesvdThinArgs<Matrix, Vector, LeftSingularVectors, RightSingularVectors>
+    template <LapackMatrix Matrix, mdspan_concepts::LayoutRightVector Vector,
+              mdspan_concepts::LayoutRightMatrix LeftSingularVectors,
+              mdspan_concepts::LayoutRightMatrix RightSingularVectors>
+      requires GesvdThinArgs<Matrix, Vector, LeftSingularVectors, RightSingularVectors>
     int gesvd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
       using scalar_type = typename Matrix::element_type;
       using real_type = detail::real_scalar_t<scalar_type>;
@@ -257,7 +245,7 @@ namespace cytnx::lapack {
       blas_int info = 0;
       blas_int lwork = -1;
 
-      if constexpr (detail::RealLapackScalar<scalar_type>) {
+      if constexpr (RealLapackScalar<scalar_type>) {
         scalar_type work_query{};
         native::gesvd("S", "S", &native_m, &native_n, a.data_handle(), &lda, s.data_handle(),
                       vt.data_handle(), &native_ldu, u.data_handle(), &native_ldvt, &work_query,
@@ -286,8 +274,8 @@ namespace cytnx::lapack {
       return info;
     }
 
-    template <class Matrix, class Vector>
-      requires detail::EighArgs<Matrix, Vector>
+    template <LapackMatrix Matrix, mdspan_concepts::LayoutRightVector Vector>
+      requires EighArgs<Matrix, Vector>
     int eigh(char jobz, char uplo, Matrix a, Vector w) {
       using scalar_type = typename Matrix::element_type;
       using real_type = detail::real_scalar_t<scalar_type>;
@@ -303,7 +291,7 @@ namespace cytnx::lapack {
       blas_int info = 0;
       blas_int lwork = -1;
 
-      if constexpr (detail::RealLapackScalar<scalar_type>) {
+      if constexpr (RealLapackScalar<scalar_type>) {
         scalar_type work_query{};
         native::syev(&jobz, &native_uplo, &native_n, a.data_handle(), &lda, w.data_handle(),
                      &work_query, &lwork, &info);
