@@ -115,24 +115,14 @@ namespace cytnx::lapack {
   concept ComplexLapackMatrix =
     LapackMatrix<View> && ComplexLapackScalar<typename View::element_type>;
 
-  template <class Vector, class Scalar>
+  template <class First, class... Rest>
+  concept SameElementType =
+    (... && std::same_as<typename First::element_type, typename Rest::element_type>);
+
+  template <class Vector, class View>
   concept RealVectorFor =
     RealLapackVector<Vector> &&
-    std::same_as<typename Vector::element_type, detail::real_scalar_t<Scalar>>;
-
-  template <class Matrix, class Vector>
-  concept GesvdValuesArgs =
-    LapackMatrix<Matrix> && RealVectorFor<Vector, typename Matrix::element_type>;
-
-  template <class Matrix, class Vector, class LeftSingularVectors, class RightSingularVectors>
-  concept GesvdThinArgs =
-    GesvdValuesArgs<Matrix, Vector> && mdspan_concepts::LayoutRightMatrix<LeftSingularVectors> &&
-    mdspan_concepts::LayoutRightMatrix<RightSingularVectors> &&
-    std::same_as<typename LeftSingularVectors::element_type, typename Matrix::element_type> &&
-    std::same_as<typename RightSingularVectors::element_type, typename Matrix::element_type>;
-
-  template <class Matrix, class Vector>
-  concept EighArgs = LapackMatrix<Matrix> && RealVectorFor<Vector, typename Matrix::element_type>;
+    std::same_as<typename Vector::element_type, detail::real_scalar_t<typename View::element_type>>;
 
   namespace native {
 
@@ -193,7 +183,7 @@ namespace cytnx::lapack {
   }  // namespace native
 
   template <LapackMatrix Matrix, RealLapackVector Vector>
-    requires GesvdValuesArgs<Matrix, Vector>
+    requires RealVectorFor<Vector, Matrix>
   int gesvd(Matrix a, Vector s) {
     using scalar_type = typename Matrix::element_type;
     using real_type = detail::real_scalar_t<scalar_type>;
@@ -238,7 +228,8 @@ namespace cytnx::lapack {
 
   template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
             LapackMatrix RightSingularVectors>
-    requires GesvdThinArgs<Matrix, Vector, LeftSingularVectors, RightSingularVectors>
+    requires RealVectorFor<Vector, Matrix> &&
+             SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
   int gesvd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
     using scalar_type = typename Matrix::element_type;
     using real_type = detail::real_scalar_t<scalar_type>;
@@ -291,7 +282,7 @@ namespace cytnx::lapack {
   }
 
   template <LapackMatrix Matrix, RealLapackVector Vector>
-    requires EighArgs<Matrix, Vector>
+    requires RealVectorFor<Vector, Matrix>
   int eigh(char jobz, char uplo, Matrix a, Vector w) {
     using scalar_type = typename Matrix::element_type;
     using real_type = detail::real_scalar_t<scalar_type>;
