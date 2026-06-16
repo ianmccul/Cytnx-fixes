@@ -87,18 +87,37 @@ namespace cytnx::lapack {
     std::is_same_v<std::remove_cv_t<T>, float> || std::is_same_v<std::remove_cv_t<T>, double>;
 
   template <class T>
-  concept LapackScalar =
-    std::is_same_v<std::remove_cv_t<T>, float> || std::is_same_v<std::remove_cv_t<T>, double> ||
-    std::is_same_v<std::remove_cv_t<T>, std::complex<float>> ||
-    std::is_same_v<std::remove_cv_t<T>, std::complex<double>>;
+  concept ComplexLapackScalar = std::is_same_v<std::remove_cv_t<T>, std::complex<float>> ||
+                                std::is_same_v<std::remove_cv_t<T>, std::complex<double>>;
+
+  template <class T>
+  concept LapackScalar = RealLapackScalar<T> || ComplexLapackScalar<T>;
+
+  template <class View>
+  concept LapackVector =
+    mdspan_concepts::LayoutRightVector<View> && LapackScalar<typename View::element_type>;
+
+  template <class View>
+  concept RealLapackVector = LapackVector<View> && RealLapackScalar<typename View::element_type>;
+
+  template <class View>
+  concept ComplexLapackVector =
+    LapackVector<View> && ComplexLapackScalar<typename View::element_type>;
 
   template <class View>
   concept LapackMatrix =
     mdspan_concepts::LayoutRightMatrix<View> && LapackScalar<typename View::element_type>;
 
+  template <class View>
+  concept RealLapackMatrix = LapackMatrix<View> && RealLapackScalar<typename View::element_type>;
+
+  template <class View>
+  concept ComplexLapackMatrix =
+    LapackMatrix<View> && ComplexLapackScalar<typename View::element_type>;
+
   template <class Vector, class Scalar>
   concept RealVectorFor =
-    mdspan_concepts::LayoutRightVector<Vector> &&
+    RealLapackVector<Vector> &&
     std::same_as<typename Vector::element_type, detail::real_scalar_t<Scalar>>;
 
   template <class Matrix, class Vector>
@@ -175,7 +194,7 @@ namespace cytnx::lapack {
 
   namespace row_major {
 
-    template <LapackMatrix Matrix, mdspan_concepts::LayoutRightVector Vector>
+    template <LapackMatrix Matrix, RealLapackVector Vector>
       requires GesvdValuesArgs<Matrix, Vector>
     int gesvd(Matrix a, Vector s) {
       using scalar_type = typename Matrix::element_type;
@@ -219,9 +238,8 @@ namespace cytnx::lapack {
       return info;
     }
 
-    template <LapackMatrix Matrix, mdspan_concepts::LayoutRightVector Vector,
-              mdspan_concepts::LayoutRightMatrix LeftSingularVectors,
-              mdspan_concepts::LayoutRightMatrix RightSingularVectors>
+    template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
+              LapackMatrix RightSingularVectors>
       requires GesvdThinArgs<Matrix, Vector, LeftSingularVectors, RightSingularVectors>
     int gesvd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
       using scalar_type = typename Matrix::element_type;
@@ -274,7 +292,7 @@ namespace cytnx::lapack {
       return info;
     }
 
-    template <LapackMatrix Matrix, mdspan_concepts::LayoutRightVector Vector>
+    template <LapackMatrix Matrix, RealLapackVector Vector>
       requires EighArgs<Matrix, Vector>
     int eigh(char jobz, char uplo, Matrix a, Vector w) {
       using scalar_type = typename Matrix::element_type;

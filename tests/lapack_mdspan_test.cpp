@@ -16,6 +16,18 @@ namespace {
   template <class T>
   using vector_view = cytnx::stdex::mdspan<T, cytnx::stdex::dextents<std::size_t, 1>>;
 
+  static_assert(cytnx::lapack::RealLapackScalar<float>);
+  static_assert(cytnx::lapack::RealLapackScalar<double>);
+  static_assert(cytnx::lapack::ComplexLapackScalar<std::complex<float>>);
+  static_assert(cytnx::lapack::ComplexLapackScalar<std::complex<double>>);
+  static_assert(cytnx::lapack::LapackMatrix<matrix_view<double>>);
+  static_assert(cytnx::lapack::RealLapackMatrix<matrix_view<double>>);
+  static_assert(cytnx::lapack::ComplexLapackMatrix<matrix_view<std::complex<double>>>);
+  static_assert(cytnx::lapack::LapackVector<vector_view<float>>);
+  static_assert(cytnx::lapack::RealLapackVector<vector_view<double>>);
+  static_assert(cytnx::lapack::ComplexLapackVector<vector_view<std::complex<float>>>);
+  static_assert(cytnx::lapack::RealVectorFor<vector_view<double>, std::complex<double>>);
+
   TEST(LapackMdspanTest, RowMajorSyevComputesEigenvalues) {
     std::vector<double> a = {
       3.0,
