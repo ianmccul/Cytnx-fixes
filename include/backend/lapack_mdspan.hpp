@@ -47,6 +47,22 @@ namespace cytnx::lapack::fortran {
   void zheev_(const char *jobz, const char *uplo, const blas_int *n, std::complex<double> *a,
               const blas_int *lda, double *w, std::complex<double> *work, const blas_int *lwork,
               double *rwork, blas_int *info);
+
+  void sgeev_(const char *jobvl, const char *jobvr, const blas_int *n, float *a,
+              const blas_int *lda, float *wr, float *wi, float *vl, const blas_int *ldvl, float *vr,
+              const blas_int *ldvr, float *work, const blas_int *lwork, blas_int *info);
+  void dgeev_(const char *jobvl, const char *jobvr, const blas_int *n, double *a,
+              const blas_int *lda, double *wr, double *wi, double *vl, const blas_int *ldvl,
+              double *vr, const blas_int *ldvr, double *work, const blas_int *lwork,
+              blas_int *info);
+  void cgeev_(const char *jobvl, const char *jobvr, const blas_int *n, std::complex<float> *a,
+              const blas_int *lda, std::complex<float> *w, std::complex<float> *vl,
+              const blas_int *ldvl, std::complex<float> *vr, const blas_int *ldvr,
+              std::complex<float> *work, const blas_int *lwork, float *rwork, blas_int *info);
+  void zgeev_(const char *jobvl, const char *jobvr, const blas_int *n, std::complex<double> *a,
+              const blas_int *lda, std::complex<double> *w, std::complex<double> *vl,
+              const blas_int *ldvl, std::complex<double> *vr, const blas_int *ldvr,
+              std::complex<double> *work, const blas_int *lwork, double *rwork, blas_int *info);
   }
 
 }  // namespace cytnx::lapack::fortran
@@ -92,6 +108,14 @@ namespace cytnx::lapack {
   template <class View>
   concept ComplexLapackVector =
     LapackVector<View> && ComplexLapackScalar<typename View::element_type>;
+
+  template <class Matrix, class Vector>
+  concept LapackEigenvalueVector =
+    ComplexLapackVector<Vector> &&
+    ((RealLapackScalar<typename Matrix::element_type> &&
+      std::same_as<typename Vector::element_type, std::complex<typename Matrix::element_type>>) ||
+     (ComplexLapackScalar<typename Matrix::element_type> &&
+      std::same_as<typename Matrix::element_type, typename Vector::element_type>));
 
   template <class View>
   concept LapackMatrix =
@@ -163,6 +187,36 @@ namespace cytnx::lapack {
                        std::complex<double> *work, const blas_int *lwork, double *rwork,
                        blas_int *info) {
         fortran::zheev_(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
+      }
+
+      inline void geev(const char *jobvl, const char *jobvr, const blas_int *n, float *a,
+                       const blas_int *lda, float *wr, float *wi, float *vl, const blas_int *ldvl,
+                       float *vr, const blas_int *ldvr, float *work, const blas_int *lwork,
+                       blas_int *info) {
+        fortran::sgeev_(jobvl, jobvr, n, a, lda, wr, wi, vl, ldvl, vr, ldvr, work, lwork, info);
+      }
+
+      inline void geev(const char *jobvl, const char *jobvr, const blas_int *n, double *a,
+                       const blas_int *lda, double *wr, double *wi, double *vl,
+                       const blas_int *ldvl, double *vr, const blas_int *ldvr, double *work,
+                       const blas_int *lwork, blas_int *info) {
+        fortran::dgeev_(jobvl, jobvr, n, a, lda, wr, wi, vl, ldvl, vr, ldvr, work, lwork, info);
+      }
+
+      inline void geev(const char *jobvl, const char *jobvr, const blas_int *n,
+                       std::complex<float> *a, const blas_int *lda, std::complex<float> *w,
+                       std::complex<float> *vl, const blas_int *ldvl, std::complex<float> *vr,
+                       const blas_int *ldvr, std::complex<float> *work, const blas_int *lwork,
+                       float *rwork, blas_int *info) {
+        fortran::cgeev_(jobvl, jobvr, n, a, lda, w, vl, ldvl, vr, ldvr, work, lwork, rwork, info);
+      }
+
+      inline void geev(const char *jobvl, const char *jobvr, const blas_int *n,
+                       std::complex<double> *a, const blas_int *lda, std::complex<double> *w,
+                       std::complex<double> *vl, const blas_int *ldvl, std::complex<double> *vr,
+                       const blas_int *ldvr, std::complex<double> *work, const blas_int *lwork,
+                       double *rwork, blas_int *info) {
+        fortran::zgeev_(jobvl, jobvr, n, a, lda, w, vl, ldvl, vr, ldvr, work, lwork, rwork, info);
       }
 
     }  // namespace native
@@ -308,6 +362,54 @@ namespace cytnx::lapack {
       return info;
     }
 
+    template <LapackMatrix Matrix, ComplexLapackVector Vector>
+      requires LapackEigenvalueVector<Matrix, Vector>
+    int geev_values(Matrix a, Vector w) {
+      using scalar_type = typename Matrix::element_type;
+      using real_type = mdspan_concepts::real_element_t<scalar_type>;
+
+      const auto n = a.extent(0);
+      cytnx_error_msg(a.extent(1) != n, "[ERROR] LAPACK geev input must be square.%s", "\n");
+      cytnx_error_msg(w.extent(0) < n, "[ERROR] LAPACK geev eigenvalue output is too small.%s",
+                      "\n");
+
+      const blas_int native_n = detail::to_blas_int(n, "n");
+      const blas_int lda = std::max<blas_int>(1, native_n);
+      const blas_int one = 1;
+      blas_int info = 0;
+      blas_int lwork = -1;
+
+      if constexpr (RealLapackScalar<scalar_type>) {
+        scalar_type work_query{};
+        std::vector<real_type> wr(n);
+        std::vector<real_type> wi(n);
+        native::geev("N", "N", &native_n, a.data_handle(), &lda, wr.data(), wi.data(), nullptr,
+                     &one, nullptr, &one, &work_query, &lwork, &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::geev("N", "N", &native_n, a.data_handle(), &lda, wr.data(), wi.data(), nullptr,
+                     &one, nullptr, &one, work.data(), &lwork, &info);
+        if (info != 0) return info;
+        for (std::size_t i = 0; i < n; ++i) {
+          w(i) = typename Vector::element_type{wr[i], wi[i]};
+        }
+      } else {
+        scalar_type work_query{};
+        const std::size_t rwork_size = std::max<std::size_t>(1, 2 * n);
+        std::vector<real_type> rwork(rwork_size);
+        native::geev("N", "N", &native_n, a.data_handle(), &lda, w.data_handle(), nullptr, &one,
+                     nullptr, &one, &work_query, &lwork, rwork.data(), &info);
+        if (info != 0) return info;
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
+        std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+        native::geev("N", "N", &native_n, a.data_handle(), &lda, w.data_handle(), nullptr, &one,
+                     nullptr, &one, work.data(), &lwork, rwork.data(), &info);
+      }
+
+      return info;
+    }
+
   }  // namespace lowlevel
 
   namespace detail {
@@ -381,6 +483,15 @@ namespace cytnx::lapack {
     requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void self_adjoint_eigh(char jobz, char uplo, Matrix a, Vector w) {
     detail::check_lapack_info("eigh", lowlevel::eigh(jobz, uplo, a, w), a, w);
+  }
+
+  /**
+   * @brief Compute eigenvalues of a general square matrix with checked host LAPACK diagnostics.
+   */
+  template <LapackMatrix Matrix, ComplexLapackVector Vector>
+    requires LapackEigenvalueVector<Matrix, Vector>
+  void eig_values(Matrix a, Vector w) {
+    detail::check_lapack_info("geev", lowlevel::geev_values(a, w), a, w);
   }
 
 }  // namespace cytnx::lapack

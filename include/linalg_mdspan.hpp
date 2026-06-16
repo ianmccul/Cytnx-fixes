@@ -62,6 +62,20 @@ namespace cytnx {
                   std::forward<MatrixArg>(a), std::forward<VectorArg>(w));
   }
 
+  /**
+   * @brief Compute eigenvalues of a general square host layout-right mdspan matrix view.
+   *
+   * Real inputs may have complex eigenvalues, so the eigenvalue output is always complex. Variant
+   * arguments dispatch over alternatives and report an error if the active alternatives are
+   * incompatible.
+   */
+  template <class MatrixArg, class VectorArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::eig_values_kernel, MatrixArg, VectorArg>
+  void eig_values(MatrixArg &&a, VectorArg &&w) {
+    invoke_kernel(linalg_mdspan_backend::eig_values_kernel{}, std::forward<MatrixArg>(a),
+                  std::forward<VectorArg>(w));
+  }
+
 }  // namespace cytnx
 
 #endif  // BACKEND_TORCH

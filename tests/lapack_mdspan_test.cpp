@@ -63,6 +63,15 @@ namespace {
   void run_kernel(MdspanDispatchKernel, matrix_view<double> &, vector_view<double> &) {}
   void run_kernel(DispatchRvalueKernel, DispatchA &&) {}
 
+  template <class T>
+  bool has_eigenvalue_near(const std::vector<std::complex<T>> &values, std::complex<T> expected,
+                           T tolerance) {
+    for (const auto &value : values) {
+      if (std::abs(value - expected) <= tolerance) return true;
+    }
+    return false;
+  }
+
   static_assert(cytnx::Variant<std::variant<DispatchA, DispatchC>>);
   static_assert(
     cytnx::AnyDispatchInvocable<DispatchKernel, std::variant<DispatchC, DispatchA> &, DispatchB &>);
@@ -167,6 +176,42 @@ namespace {
     EXPECT_NEAR(w[1], 3.0, 1e-12);
   }
 
+  TEST(LapackMdspanTest, RowMajorGeevComputesRealMatrixEigenvalues) {
+    using complex = std::complex<double>;
+    std::vector<double> a = {
+      0.0,
+      -1.0,
+      1.0,
+      0.0,
+    };
+    std::vector<complex> w(2);
+
+    const int info = cytnx::lapack::lowlevel::geev_values(matrix_view<double>(a.data(), 2, 2),
+                                                          vector_view<complex>(w.data(), 2));
+
+    ASSERT_EQ(info, 0);
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, 1.0}, 1e-12));
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, -1.0}, 1e-12));
+  }
+
+  TEST(LapackMdspanTest, RowMajorGeevSupportsComplexMatrices) {
+    using complex = std::complex<double>;
+    std::vector<complex> a = {
+      complex{2.0, 1.0},
+      complex{0.0, 0.0},
+      complex{0.0, 0.0},
+      complex{-1.0, 0.5},
+    };
+    std::vector<complex> w(2);
+
+    const int info = cytnx::lapack::lowlevel::geev_values(matrix_view<complex>(a.data(), 2, 2),
+                                                          vector_view<complex>(w.data(), 2));
+
+    ASSERT_EQ(info, 0);
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{2.0, 1.0}, 1e-12));
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{-1.0, 0.5}, 1e-12));
+  }
+
   TEST(LapackMdspanTest, RowMajorGesvdComputesSingularValues) {
     std::vector<double> a = {
       3.0, 0.0, 0.0, 0.0, 4.0, 0.0,
@@ -251,6 +296,23 @@ namespace {
     EXPECT_NEAR(w[1], 3.0, 1e-12);
   }
 
+  TEST(LapackMdspanTest, CheckedGeevWrapperComputesEigenvalues) {
+    using complex = std::complex<double>;
+    std::vector<double> a = {
+      0.0,
+      -2.0,
+      2.0,
+      0.0,
+    };
+    std::vector<complex> w(2);
+
+    cytnx::lapack::eig_values(matrix_view<double>(a.data(), 2, 2),
+                              vector_view<complex>(w.data(), 2));
+
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, 2.0}, 1e-12));
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, -2.0}, 1e-12));
+  }
+
   TEST(LapackMdspanTest, VariantSvdValuesDispatchesTensorTAlternatives) {
     cytnx::Tensor a = cytnx::zeros({2, 3}, cytnx::Type.Double);
     a.at<double>({0, 0}) = 3.0;
@@ -294,6 +356,22 @@ namespace {
 
     EXPECT_NEAR(s[0], 5.464985704219043, 1e-12);
     EXPECT_NEAR(s[1], 0.365966190626257, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, PublicEigValuesAcceptsRawHostMdspans) {
+    using complex = std::complex<double>;
+    std::vector<double> a = {
+      0.0,
+      -3.0,
+      3.0,
+      0.0,
+    };
+    std::vector<complex> w(2);
+
+    cytnx::eig_values(matrix_view<double>(a.data(), 2, 2), vector_view<complex>(w.data(), 2));
+
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, 3.0}, 1e-12));
+    EXPECT_TRUE(has_eigenvalue_near(w, complex{0.0, -3.0}, 1e-12));
   }
 
 }  // namespace
