@@ -8,6 +8,7 @@
 #include <concepts>
 #include <tuple>
 #include <type_traits>
+#include <utility>
 #include <variant>
 
 namespace cytnx {
@@ -91,6 +92,88 @@ namespace cytnx {
   /// Variant over real-or-complex scalar types and enabled access backends.
   template <std::size_t Rank, class Layout = stdex::layout_right>
   using NumericTensor = TensorVariantT<Rank, Layout, NumericScalars>;
+
+  template <class T>
+  struct is_variant : std::false_type {};
+
+  template <class... Alternatives>
+  struct is_variant<std::variant<Alternatives...>> : std::true_type {};
+
+  /// True if `T` is a `std::variant`.
+  template <class T>
+  concept Variant = is_variant<std::remove_cvref_t<T>>::value;
+
+  namespace tensor_t_detail {
+
+    template <class T>
+    struct dispatch_alternatives {
+      using type = std::tuple<T>;
+    };
+
+    template <class... Alternatives>
+    struct dispatch_alternatives<std::variant<Alternatives...>> {
+      using type = std::tuple<Alternatives...>;
+    };
+
+    template <class T>
+    using dispatch_alternatives_t = typename dispatch_alternatives<std::remove_cvref_t<T>>::type;
+
+    template <class F, class Accumulated, class... AlternativeTuples>
+    struct any_dispatch_invocable;
+
+    template <class F, class... Accumulated>
+    struct any_dispatch_invocable<F, std::tuple<Accumulated...>> {
+      static constexpr bool value = std::is_invocable_v<F, Accumulated &...>;
+    };
+
+    template <class F, class... Accumulated, class... Alternatives, class... RestTuples>
+    struct any_dispatch_invocable<F, std::tuple<Accumulated...>, std::tuple<Alternatives...>,
+                                  RestTuples...> {
+      static constexpr bool value =
+        (any_dispatch_invocable<F, std::tuple<Accumulated..., Alternatives>,
+                                RestTuples...>::value ||
+         ...);
+    };
+
+    template <class F>
+    decltype(auto) dispatch_visit(F &&f) {
+      return std::forward<F>(f)();
+    }
+
+    template <class F, class Arg, class... Rest>
+    decltype(auto) dispatch_visit(F &&f, Arg &&arg, Rest &&...rest) {
+      if constexpr (Variant<Arg>) {
+        return std::visit(
+          [&](auto &&alternative) -> decltype(auto) {
+            return dispatch_visit(
+              [&](auto &&...tail) -> decltype(auto) {
+                return std::forward<F>(f)(std::forward<decltype(alternative)>(alternative),
+                                          std::forward<decltype(tail)>(tail)...);
+              },
+              std::forward<Rest>(rest)...);
+          },
+          std::forward<Arg>(arg));
+      } else {
+        return dispatch_visit(
+          [&](auto &&...tail) -> decltype(auto) {
+            return std::forward<F>(f)(std::forward<Arg>(arg),
+                                      std::forward<decltype(tail)>(tail)...);
+          },
+          std::forward<Rest>(rest)...);
+      }
+    }
+
+  }  // namespace tensor_t_detail
+
+  /**
+   * @brief True if at least one Cartesian product of dispatch alternatives is invocable by `F`.
+   *
+   * Each argument type may be a concrete type or a `std::variant`; non-variants are treated as
+   * single-alternative dispatch arguments.
+   */
+  template <class F, class... Args>
+  concept AnyDispatchInvocable = tensor_t_detail::any_dispatch_invocable<
+    F, std::tuple<>, tensor_t_detail::dispatch_alternatives_t<Args>...>::value;
 
   namespace tensor_t_detail {
 

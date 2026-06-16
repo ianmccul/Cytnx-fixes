@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <complex>
+#include <variant>
 #include <vector>
 
 #ifndef BACKEND_TORCH
@@ -41,6 +42,19 @@ namespace {
   static_assert(cytnx::mdspan_concepts::SameElementType<
                 vector_view<double>,
                 cytnx::mdspan_concepts::RealElementOf<matrix_view<std::complex<double>>>>);
+
+  struct DispatchA {};
+  struct DispatchB {};
+  struct DispatchC {};
+
+  struct DispatchCallable {
+    void operator()(DispatchA &, DispatchB &) const {}
+  };
+
+  static_assert(cytnx::Variant<std::variant<DispatchA, DispatchC>>);
+  static_assert(
+    cytnx::AnyDispatchInvocable<DispatchCallable, std::variant<DispatchC, DispatchA>, DispatchB>);
+  static_assert(!cytnx::AnyDispatchInvocable<DispatchCallable, std::variant<DispatchC>, DispatchB>);
 
   TEST(LapackMdspanTest, RowMajorSyevComputesEigenvalues) {
     std::vector<double> a = {
@@ -185,6 +199,21 @@ namespace {
     cytnx::Tensor s = cytnx::zeros({2}, cytnx::Type.Double);
 
     cytnx::RealTensor<2> a_view = cytnx::make_right_tensor_t<double, 2>(a);
+    cytnx::RealTensor<1> s_view = cytnx::make_right_tensor_t<double, 1>(s);
+
+    cytnx::svd_values(a_view, s_view);
+
+    EXPECT_NEAR(s.at<double>({0}), 4.0, 1e-12);
+    EXPECT_NEAR(s.at<double>({1}), 3.0, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, SvdValuesDispatchesMixedFixedAndVariantArguments) {
+    cytnx::Tensor a = cytnx::zeros({2, 3}, cytnx::Type.Double);
+    a.at<double>({0, 0}) = 3.0;
+    a.at<double>({1, 1}) = 4.0;
+    cytnx::Tensor s = cytnx::zeros({2}, cytnx::Type.Double);
+
+    auto a_view = cytnx::make_right_tensor_t<double, 2>(a);
     cytnx::RealTensor<1> s_view = cytnx::make_right_tensor_t<double, 1>(s);
 
     cytnx::svd_values(a_view, s_view);

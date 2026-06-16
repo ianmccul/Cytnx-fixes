@@ -6,27 +6,11 @@
 #include "backend/lapack_mdspan.hpp"
 #include "cytnx_error.hpp"
 
-#include <concepts>
-#include <cstddef>
 #include <type_traits>
-#include <variant>
 
 #ifndef BACKEND_TORCH
 
 namespace cytnx {
-
-  namespace linalg_mdspan_detail {
-
-    template <class T>
-    struct is_variant : std::false_type {};
-
-    template <class... Alternatives>
-    struct is_variant<std::variant<Alternatives...>> : std::true_type {};
-
-    template <class T>
-    concept Variant = is_variant<std::remove_cvref_t<T>>::value;
-
-  }  // namespace linalg_mdspan_detail
 
   /**
    * @brief Compute singular values of a host layout-right mdspan matrix view.
@@ -38,24 +22,6 @@ namespace cytnx {
     requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void svd_values(Matrix a, Vector s) {
     lapack::svd_values(a, s);
-  }
-
-  /// Variant-lifted overload of `svd_values`.
-  template <linalg_mdspan_detail::Variant MatrixVariant,
-            linalg_mdspan_detail::Variant VectorVariant>
-  void svd_values(MatrixVariant &a, VectorVariant &s) {
-    std::visit(
-      [](auto &matrix, auto &values) {
-        if constexpr (requires { cytnx::svd_values(matrix, values); }) {
-          cytnx::svd_values(matrix, values);
-        } else {
-          cytnx_error_msg(true,
-                          "[ERROR] svd_values variant alternatives have incompatible dtype, "
-                          "layout, rank, or backend.%s",
-                          "\n");
-        }
-      },
-      a, s);
   }
 
   /**
@@ -72,27 +38,6 @@ namespace cytnx {
     lapack::svd(a, s, u, vt);
   }
 
-  /// Variant-lifted overload of `svd`.
-  template <linalg_mdspan_detail::Variant MatrixVariant,
-            linalg_mdspan_detail::Variant VectorVariant,
-            linalg_mdspan_detail::Variant LeftSingularVectorsVariant,
-            linalg_mdspan_detail::Variant RightSingularVectorsVariant>
-  void svd(MatrixVariant &a, VectorVariant &s, LeftSingularVectorsVariant &u,
-           RightSingularVectorsVariant &vt) {
-    std::visit(
-      [](auto &matrix, auto &values, auto &left, auto &right) {
-        if constexpr (requires { cytnx::svd(matrix, values, left, right); }) {
-          cytnx::svd(matrix, values, left, right);
-        } else {
-          cytnx_error_msg(true,
-                          "[ERROR] svd variant alternatives have incompatible dtype, layout, rank, "
-                          "or backend.%s",
-                          "\n");
-        }
-      },
-      a, s, u, vt);
-  }
-
   /**
    * @brief Diagonalize a real symmetric or complex Hermitian host layout-right TensorT matrix view.
    *
@@ -105,14 +50,99 @@ namespace cytnx {
     lapack::self_adjoint_eigh(jobz, uplo, a, w);
   }
 
+  namespace linalg_mdspan_detail {
+
+    struct call_svd_values {
+      template <class Matrix, class Vector>
+        requires requires(Matrix &matrix, Vector &values) { cytnx::svd_values(matrix, values); }
+      void operator()(Matrix &matrix, Vector &values) const {
+        cytnx::svd_values(matrix, values);
+      }
+    };
+
+    struct call_svd {
+      template <class Matrix, class Vector, class LeftSingularVectors, class RightSingularVectors>
+        requires requires(Matrix &matrix, Vector &values, LeftSingularVectors &left,
+                          RightSingularVectors &right) { cytnx::svd(matrix, values, left, right); }
+      void operator()(Matrix &matrix, Vector &values, LeftSingularVectors &left,
+                      RightSingularVectors &right) const {
+        cytnx::svd(matrix, values, left, right);
+      }
+    };
+
+    struct call_self_adjoint_eigh {
+      template <class Matrix, class Vector>
+        requires requires(Matrix &matrix, Vector &values) {
+          cytnx::self_adjoint_eigh('N', 'U', matrix, values);
+        }
+      void operator()(Matrix &matrix, Vector &values) const {
+        cytnx::self_adjoint_eigh('N', 'U', matrix, values);
+      }
+
+      template <class Matrix, class Vector>
+        requires requires(Matrix &matrix, Vector &values) {
+          cytnx::self_adjoint_eigh('N', 'U', matrix, values);
+        }
+      void operator()(char jobz, char uplo, Matrix &matrix, Vector &values) const {
+        cytnx::self_adjoint_eigh(jobz, uplo, matrix, values);
+      }
+    };
+
+  }  // namespace linalg_mdspan_detail
+
+  /// Variant-lifted overload of `svd_values`.
+  template <class MatrixArg, class VectorArg>
+    requires(Variant<MatrixArg> || Variant<VectorArg>) &&
+            AnyDispatchInvocable<linalg_mdspan_detail::call_svd_values, MatrixArg, VectorArg>
+  void svd_values(MatrixArg &a, VectorArg &s) {
+    tensor_t_detail::dispatch_visit(
+      [](auto &matrix, auto &values) {
+        if constexpr (std::is_invocable_v<linalg_mdspan_detail::call_svd_values, decltype(matrix),
+                                          decltype(values)>) {
+          linalg_mdspan_detail::call_svd_values{}(matrix, values);
+        } else {
+          cytnx_error_msg(true,
+                          "[ERROR] svd_values variant alternatives have incompatible dtype, "
+                          "layout, rank, or backend.%s",
+                          "\n");
+        }
+      },
+      a, s);
+  }
+
+  /// Variant-lifted overload of `svd`.
+  template <class MatrixArg, class VectorArg, class LeftSingularVectorsArg,
+            class RightSingularVectorsArg>
+    requires(Variant<MatrixArg> || Variant<VectorArg> || Variant<LeftSingularVectorsArg> ||
+             Variant<RightSingularVectorsArg>) &&
+            AnyDispatchInvocable<linalg_mdspan_detail::call_svd, MatrixArg, VectorArg,
+                                 LeftSingularVectorsArg, RightSingularVectorsArg>
+  void svd(MatrixArg &a, VectorArg &s, LeftSingularVectorsArg &u, RightSingularVectorsArg &vt) {
+    tensor_t_detail::dispatch_visit(
+      [](auto &matrix, auto &values, auto &left, auto &right) {
+        if constexpr (std::is_invocable_v<linalg_mdspan_detail::call_svd, decltype(matrix),
+                                          decltype(values), decltype(left), decltype(right)>) {
+          linalg_mdspan_detail::call_svd{}(matrix, values, left, right);
+        } else {
+          cytnx_error_msg(true,
+                          "[ERROR] svd variant alternatives have incompatible dtype, layout, rank, "
+                          "or backend.%s",
+                          "\n");
+        }
+      },
+      a, s, u, vt);
+  }
+
   /// Variant-lifted overload of `self_adjoint_eigh`.
-  template <linalg_mdspan_detail::Variant MatrixVariant,
-            linalg_mdspan_detail::Variant VectorVariant>
-  void self_adjoint_eigh(char jobz, char uplo, MatrixVariant &a, VectorVariant &w) {
-    std::visit(
+  template <class MatrixArg, class VectorArg>
+    requires(Variant<MatrixArg> || Variant<VectorArg>) &&
+            AnyDispatchInvocable<linalg_mdspan_detail::call_self_adjoint_eigh, MatrixArg, VectorArg>
+  void self_adjoint_eigh(char jobz, char uplo, MatrixArg &a, VectorArg &w) {
+    tensor_t_detail::dispatch_visit(
       [jobz, uplo](auto &matrix, auto &values) {
-        if constexpr (requires { cytnx::self_adjoint_eigh(jobz, uplo, matrix, values); }) {
-          cytnx::self_adjoint_eigh(jobz, uplo, matrix, values);
+        if constexpr (std::is_invocable_v<linalg_mdspan_detail::call_self_adjoint_eigh,
+                                          decltype(matrix), decltype(values)>) {
+          linalg_mdspan_detail::call_self_adjoint_eigh{}(jobz, uplo, matrix, values);
         } else {
           cytnx_error_msg(true,
                           "[ERROR] self_adjoint_eigh variant alternatives have incompatible dtype, "
