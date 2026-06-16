@@ -38,9 +38,14 @@ namespace cytnx {
     template <class F, class Accumulated, class... AlternativeTuples>
     struct any_dispatch_invocable;
 
+    template <class F, class... Args>
+    concept kernel_invocable = requires(F &&f, Args &&...args) {
+      run_kernel(std::forward<F>(f), std::forward<Args>(args)...);
+    };
+
     template <class F, class... Accumulated>
     struct any_dispatch_invocable<F, std::tuple<Accumulated...>> {
-      static constexpr bool value = std::is_invocable_v<F, Accumulated &...>;
+      static constexpr bool value = kernel_invocable<F, Accumulated &...>;
     };
 
     template <class F, class... Accumulated, class... Alternatives, class... RestTuples>
@@ -104,8 +109,9 @@ namespace cytnx {
   decltype(auto) invoke_kernel(Kernel &&kernel, const char *error_message, Args &&...args) {
     return kernel_detail::dispatch_visit(
       [&kernel, error_message](auto &&...active) -> decltype(auto) {
-        if constexpr (std::is_invocable_v<Kernel, decltype(active)...>) {
-          return std::forward<Kernel>(kernel)(std::forward<decltype(active)>(active)...);
+        if constexpr (kernel_detail::kernel_invocable<Kernel, decltype(active)...>) {
+          return run_kernel(std::forward<Kernel>(kernel),
+                            std::forward<decltype(active)>(active)...);
         } else {
           cytnx_error_msg(true, "%s%s", error_message, "\n");
         }

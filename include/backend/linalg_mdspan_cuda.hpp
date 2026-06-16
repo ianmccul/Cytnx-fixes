@@ -9,7 +9,7 @@
 
 namespace cytnx::linalg_mdspan_backend {
 
-  // CUDA mdspan linalg overloads will live here.
+  // CUDA mdspan linalg run_kernel overloads will live here.
 
 }  // namespace cytnx::linalg_mdspan_backend
 

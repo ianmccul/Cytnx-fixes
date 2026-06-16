@@ -17,43 +17,6 @@
 
 namespace cytnx {
 
-  namespace linalg_mdspan_detail {
-
-    struct call_svd_values {
-      template <class... Args>
-        requires requires(Args &&...args) {
-          linalg_mdspan_backend::svd_values(std::forward<Args>(args)...);
-        }
-      void operator()(Args &&...args) const {
-        linalg_mdspan_backend::svd_values(std::forward<Args>(args)...);
-      }
-    };
-
-    struct call_svd {
-      template <class... Args>
-        requires requires(Args &&...args) {
-          linalg_mdspan_backend::svd(std::forward<Args>(args)...);
-        }
-      void operator()(Args &&...args) const {
-        linalg_mdspan_backend::svd(std::forward<Args>(args)...);
-      }
-    };
-
-    struct call_self_adjoint_eigh {
-      char jobz = 'N';
-      char uplo = 'U';
-
-      template <class... Args>
-        requires requires(Args &&...args) {
-          linalg_mdspan_backend::self_adjoint_eigh('N', 'U', std::forward<Args>(args)...);
-        }
-      void operator()(Args &&...args) const {
-        linalg_mdspan_backend::self_adjoint_eigh(jobz, uplo, std::forward<Args>(args)...);
-      }
-    };
-
-  }  // namespace linalg_mdspan_detail
-
   /**
    * @brief Compute singular values of a host layout-right mdspan matrix view.
    *
@@ -61,10 +24,10 @@ namespace cytnx {
    * over alternatives and report an error if the active alternatives are incompatible.
    */
   template <class MatrixArg, class VectorArg>
-    requires AnyDispatchInvocable<linalg_mdspan_detail::call_svd_values, MatrixArg, VectorArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::svd_values_kernel, MatrixArg, VectorArg>
   void svd_values(MatrixArg &&a, VectorArg &&s) {
     invoke_kernel(
-      linalg_mdspan_detail::call_svd_values{},
+      linalg_mdspan_backend::svd_values_kernel{},
       "[ERROR] svd_values variant alternatives have incompatible dtype, layout, rank, or backend.",
       std::forward<MatrixArg>(a), std::forward<VectorArg>(s));
   }
@@ -78,11 +41,11 @@ namespace cytnx {
    */
   template <class MatrixArg, class VectorArg, class LeftSingularVectorsArg,
             class RightSingularVectorsArg>
-    requires AnyDispatchInvocable<linalg_mdspan_detail::call_svd, MatrixArg, VectorArg,
+    requires AnyDispatchInvocable<linalg_mdspan_backend::svd_kernel, MatrixArg, VectorArg,
                                   LeftSingularVectorsArg, RightSingularVectorsArg>
   void svd(MatrixArg &&a, VectorArg &&s, LeftSingularVectorsArg &&u, RightSingularVectorsArg &&vt) {
     invoke_kernel(
-      linalg_mdspan_detail::call_svd{},
+      linalg_mdspan_backend::svd_kernel{},
       "[ERROR] svd variant alternatives have incompatible dtype, layout, rank, or backend.",
       std::forward<MatrixArg>(a), std::forward<VectorArg>(s),
       std::forward<LeftSingularVectorsArg>(u), std::forward<RightSingularVectorsArg>(vt));
@@ -96,11 +59,11 @@ namespace cytnx {
    * error if the active alternatives are incompatible.
    */
   template <class MatrixArg, class VectorArg>
-    requires AnyDispatchInvocable<linalg_mdspan_detail::call_self_adjoint_eigh, MatrixArg,
+    requires AnyDispatchInvocable<linalg_mdspan_backend::self_adjoint_eigh_kernel, MatrixArg,
                                   VectorArg>
   void self_adjoint_eigh(char jobz, char uplo, MatrixArg &&a, VectorArg &&w) {
     invoke_kernel(
-      linalg_mdspan_detail::call_self_adjoint_eigh{jobz, uplo},
+      linalg_mdspan_backend::self_adjoint_eigh_kernel{jobz, uplo},
       "[ERROR] self_adjoint_eigh variant alternatives have incompatible dtype, layout, rank, or "
       "backend.",
       std::forward<MatrixArg>(a), std::forward<VectorArg>(w));

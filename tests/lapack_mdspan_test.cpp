@@ -47,15 +47,15 @@ namespace {
   struct DispatchB {};
   struct DispatchC {};
 
-  struct DispatchCallable {
-    void operator()(DispatchA &, DispatchB &) const {}
-  };
+  struct DispatchKernel {};
+
+  void run_kernel(DispatchKernel, DispatchA &, DispatchB &) {}
 
   static_assert(cytnx::Variant<std::variant<DispatchA, DispatchC>>);
   static_assert(
-    cytnx::AnyDispatchInvocable<DispatchCallable, std::variant<DispatchC, DispatchA>, DispatchB>);
-  static_assert(!cytnx::AnyDispatchInvocable<DispatchCallable, std::variant<DispatchC>, DispatchB>);
-  static_assert(cytnx::AnyDispatchInvocable<DispatchCallable, DispatchA, DispatchB>);
+    cytnx::AnyDispatchInvocable<DispatchKernel, std::variant<DispatchC, DispatchA>, DispatchB>);
+  static_assert(!cytnx::AnyDispatchInvocable<DispatchKernel, std::variant<DispatchC>, DispatchB>);
+  static_assert(cytnx::AnyDispatchInvocable<DispatchKernel, DispatchA, DispatchB>);
 
   TEST(LapackMdspanTest, RowMajorSyevComputesEigenvalues) {
     std::vector<double> a = {
