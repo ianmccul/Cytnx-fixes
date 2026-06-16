@@ -7,6 +7,10 @@
 #include "cytnx_error.hpp"
 #include "kernel.hpp"
 
+#ifdef UNI_GPU
+  #include "backend/linalg_mdspan_cuda.hpp"
+#endif
+
 #include <utility>
 
 #ifndef BACKEND_TORCH
