@@ -53,10 +53,14 @@ namespace {
   struct NamedDispatchKernel {
     static constexpr std::string_view name = "dispatch_test";
   };
+  struct MdspanDispatchKernel {
+    static constexpr std::string_view name = "mdspan_dispatch_test";
+  };
   struct DispatchRvalueKernel {};
 
   void run_kernel(DispatchKernel, DispatchA &, DispatchB &) {}
   void run_kernel(NamedDispatchKernel, DispatchA &, DispatchB &) {}
+  void run_kernel(MdspanDispatchKernel, matrix_view<double> &, vector_view<double> &) {}
   void run_kernel(DispatchRvalueKernel, DispatchA &&) {}
 
   static_assert(cytnx::Variant<std::variant<DispatchA, DispatchC>>);
@@ -85,6 +89,29 @@ namespace {
       EXPECT_NE(message.find("arguments:"), std::string::npos);
       EXPECT_NE(message.find("arg0:"), std::string::npos);
       EXPECT_NE(message.find("arg1:"), std::string::npos);
+    }
+  }
+
+  TEST(LapackMdspanTest, InvokeKernelReportsMdspanArgumentMetadata) {
+    std::vector<float> bad_matrix_data(4);
+    std::vector<double> values_data(2);
+    std::variant<matrix_view<float>, matrix_view<double>> active_bad =
+      matrix_view<float>(bad_matrix_data.data(), 2, 2);
+    vector_view<double> values(values_data.data(), 2);
+
+    try {
+      cytnx::invoke_kernel(MdspanDispatchKernel{}, active_bad, values);
+      FAIL() << "Expected invoke_kernel to reject the active mdspan alternative.";
+    } catch (const std::logic_error &err) {
+      const std::string message = err.what();
+      EXPECT_NE(message.find("No matching backend kernel found for mdspan_dispatch_test"),
+                std::string::npos);
+      EXPECT_NE(message.find("rank: 2"), std::string::npos);
+      EXPECT_NE(message.find("extents: [2, 2]"), std::string::npos);
+      EXPECT_NE(message.find("strides:"), std::string::npos);
+      EXPECT_NE(message.find("element_type:"), std::string::npos);
+      EXPECT_NE(message.find("layout: layout_right"), std::string::npos);
+      EXPECT_NE(message.find("access: host"), std::string::npos);
     }
   }
 

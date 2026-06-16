@@ -2,7 +2,9 @@
 #define CYTNX_KERNEL_HPP_
 
 #include "cytnx_error.hpp"
+#include "mdspan_concepts.hpp"
 
+#include <concepts>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -98,18 +100,126 @@ namespace cytnx {
       return type_name<Kernel>();
     }
 
+    template <class T>
+    concept has_device = requires(const T &value) {
+      { value.device() } -> std::convertible_to<int>;
+    };
+
+    template <class T>
+    concept tensor_metadata_like = requires(const T &value) {
+      { value.rank() } -> std::convertible_to<std::size_t>;
+      { value.shape() };
+      { value.dtype_str() } -> std::convertible_to<std::string>;
+      { value.device_str() } -> std::convertible_to<std::string>;
+      { value.is_contiguous() } -> std::convertible_to<bool>;
+    };
+
+    template <class Sequence>
+    void append_sequence(std::ostringstream &out, const Sequence &sequence) {
+      out << '[';
+      for (std::size_t i = 0; i < sequence.size(); ++i) {
+        if (i != 0) out << ", ";
+        out << sequence[i];
+      }
+      out << ']';
+    }
+
+    template <mdspan_concepts::MdspanView View>
+    void append_extents(std::ostringstream &out, const View &view) {
+      out << '[';
+      for (std::size_t axis = 0; axis < std::remove_cvref_t<View>::rank(); ++axis) {
+        if (axis != 0) out << ", ";
+        out << view.extent(axis);
+      }
+      out << ']';
+    }
+
+    template <mdspan_concepts::MdspanView View>
+    void append_strides(std::ostringstream &out, const View &view) {
+      out << '[';
+      for (std::size_t axis = 0; axis < std::remove_cvref_t<View>::rank(); ++axis) {
+        if (axis != 0) out << ", ";
+        out << view.stride(axis);
+      }
+      out << ']';
+    }
+
+    template <class Layout>
+    std::string_view layout_name() {
+      if constexpr (std::is_same_v<std::remove_cvref_t<Layout>, stdex::layout_right>) {
+        return "layout_right";
+      } else if constexpr (std::is_same_v<std::remove_cvref_t<Layout>, stdex::layout_stride>) {
+        return "layout_stride";
+      } else {
+        return {};
+      }
+    }
+
+    template <class Accessor>
+    std::string_view accessor_name() {
+      if constexpr (mdspan_concepts::HostAccessor<Accessor>) {
+        return "host";
+      } else if constexpr (mdspan_concepts::CudaAccessor<Accessor>) {
+        return "cuda";
+      } else {
+        return {};
+      }
+    }
+
+    template <mdspan_concepts::MdspanView Arg>
+    void append_mdspan_argument(std::ostringstream &out, const Arg &arg) {
+      using arg_type = std::remove_cvref_t<Arg>;
+      out << "    rank: " << arg_type::rank() << '\n';
+      out << "    extents: ";
+      append_extents(out, arg);
+      out << '\n';
+      out << "    strides: ";
+      append_strides(out, arg);
+      out << '\n';
+      out << "    element_type: " << type_name<typename arg_type::element_type>() << '\n';
+      const auto layout = layout_name<typename arg_type::layout_type>();
+      out << "    layout: "
+          << (layout.empty() ? type_name<typename arg_type::layout_type>() : std::string(layout))
+          << '\n';
+      const auto accessor = accessor_name<typename arg_type::accessor_type>();
+      out << "    access: "
+          << (accessor.empty() ? type_name<typename arg_type::accessor_type>()
+                               : std::string(accessor))
+          << '\n';
+      if constexpr (has_device<Arg>) {
+        out << "    device: " << arg.device() << '\n';
+      }
+    }
+
+    template <tensor_metadata_like Arg>
+    void append_tensor_metadata_argument(std::ostringstream &out, const Arg &arg) {
+      out << "    rank: " << arg.rank() << '\n';
+      out << "    shape: ";
+      append_sequence(out, arg.shape());
+      out << '\n';
+      out << "    dtype: " << arg.dtype_str() << '\n';
+      out << "    device: " << arg.device_str() << '\n';
+      out << "    contiguous: " << (arg.is_contiguous() ? "true" : "false") << '\n';
+    }
+
     template <class Arg>
-    void append_argument_type(std::ostringstream &out, std::size_t index) {
-      out << "  arg" << index << ": " << type_name<Arg>() << '\n';
+    void append_argument(std::ostringstream &out, std::size_t index, const Arg &arg) {
+      out << "  arg" << index << ":\n";
+      out << "    type: " << type_name<Arg>() << '\n';
+      if constexpr (mdspan_concepts::MdspanView<std::remove_cvref_t<Arg>>) {
+        append_mdspan_argument(out, arg);
+      } else if constexpr (tensor_metadata_like<std::remove_cvref_t<Arg>>) {
+        append_tensor_metadata_argument(out, arg);
+      }
     }
 
     template <class Kernel, class... Args>
-    std::string generic_kernel_error() {
+    std::string generic_kernel_error(Args &&...args) {
       std::ostringstream out;
       out << "[ERROR] No matching backend kernel found for " << kernel_name<Kernel>() << ".\n";
       out << "arguments:\n";
       std::size_t index = 0;
-      (append_argument_type<Args>(out, index++), ...);
+      (append_argument(out, index++, args), ...);
       return out.str();
     }
 
@@ -164,8 +274,8 @@ namespace cytnx {
    * operation-specific diagnostics. This fallback is used when no better overload is available.
    */
   template <class Kernel, class... Args>
-  std::string describe_kernel_error(Kernel &&, Args &&...) {
-    return kernel_detail::generic_kernel_error<Kernel, Args...>();
+  std::string describe_kernel_error(Kernel &&, Args &&...args) {
+    return kernel_detail::generic_kernel_error<Kernel, Args...>(std::forward<Args>(args)...);
   }
 
   /**
