@@ -91,6 +91,18 @@ namespace cytnx {
                   std::forward<DiagonalArg>(diagonal), std::forward<OffDiagonalArg>(offdiagonal));
   }
 
+  /**
+   * @brief Invert a square matrix in place.
+   *
+   * Variant arguments dispatch over alternatives and report an error if the active alternative is
+   * incompatible.
+   */
+  template <class MatrixArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::inverse_inplace_kernel, MatrixArg>
+  void inverse_inplace(MatrixArg &&a) {
+    invoke_kernel(linalg_mdspan_backend::inverse_inplace_kernel{}, std::forward<MatrixArg>(a));
+  }
+
 }  // namespace cytnx
 
 #endif  // BACKEND_TORCH

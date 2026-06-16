@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <complex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -224,6 +225,62 @@ namespace {
     EXPECT_NEAR(diagonal[1], (5.0 + std::sqrt(5.0)) / 2.0, 1e-12);
   }
 
+  TEST(LapackMdspanTest, GetriInvertsRowMajorMatrixInPlace) {
+    std::vector<double> a = {
+      4.0,
+      7.0,
+      2.0,
+      6.0,
+    };
+
+    const int info = cytnx::lapack::lowlevel::getri_inplace(matrix_view<double>(a.data(), 2, 2));
+
+    ASSERT_EQ(info, 0);
+    EXPECT_NEAR(a[0], 0.6, 1e-12);
+    EXPECT_NEAR(a[1], -0.7, 1e-12);
+    EXPECT_NEAR(a[2], -0.2, 1e-12);
+    EXPECT_NEAR(a[3], 0.4, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, GetriSupportsComplexMatrices) {
+    using complex = std::complex<double>;
+    std::vector<complex> a = {
+      complex{1.0, 1.0},
+      complex{0.0, 0.0},
+      complex{0.0, 0.0},
+      complex{2.0, -1.0},
+    };
+
+    const int info = cytnx::lapack::lowlevel::getri_inplace(matrix_view<complex>(a.data(), 2, 2));
+
+    ASSERT_EQ(info, 0);
+    EXPECT_NEAR(std::abs(a[0] - complex{0.5, -0.5}), 0.0, 1e-12);
+    EXPECT_NEAR(std::abs(a[1]), 0.0, 1e-12);
+    EXPECT_NEAR(std::abs(a[2]), 0.0, 1e-12);
+    EXPECT_NEAR(std::abs(a[3] - complex{0.4, 0.2}), 0.0, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, GetriAcceptsEmptyMatrix) {
+    std::vector<double> a;
+
+    const int info = cytnx::lapack::lowlevel::getri_inplace(matrix_view<double>(a.data(), 0, 0));
+
+    EXPECT_EQ(info, 0);
+  }
+
+  TEST(LapackMdspanTest, GetriReportsSingularMatrix) {
+    std::vector<double> a = {
+      1.0,
+      2.0,
+      2.0,
+      4.0,
+    };
+
+    const int info = cytnx::lapack::lowlevel::getri_inplace(matrix_view<double>(a.data(), 2, 2));
+
+    EXPECT_GT(info, 0);
+  }
+
   TEST(LapackMdspanTest, RowMajorGesvdComputesSingularValues) {
     std::vector<double> a = {
       3.0, 0.0, 0.0, 0.0, 4.0, 0.0,
@@ -336,6 +393,52 @@ namespace {
     EXPECT_NEAR(diagonal[1], (5.0F + std::sqrt(5.0F)) / 2.0F, 1e-5F);
   }
 
+  TEST(LapackMdspanTest, CheckedInverseWrapperInvertsMatrix) {
+    std::vector<float> a = {
+      4.0F,
+      7.0F,
+      2.0F,
+      6.0F,
+    };
+
+    cytnx::lapack::inverse_inplace(matrix_view<float>(a.data(), 2, 2));
+
+    EXPECT_NEAR(a[0], 0.6F, 1e-5F);
+    EXPECT_NEAR(a[1], -0.7F, 1e-5F);
+    EXPECT_NEAR(a[2], -0.2F, 1e-5F);
+    EXPECT_NEAR(a[3], 0.4F, 1e-5F);
+  }
+
+  TEST(LapackMdspanTest, CheckedInverseWrapperRejectsSingularMatrix) {
+    std::vector<double> a = {
+      1.0,
+      2.0,
+      2.0,
+      4.0,
+    };
+
+    try {
+      cytnx::lapack::inverse_inplace(matrix_view<double>(a.data(), 2, 2));
+      FAIL() << "Expected singular matrix inversion to fail.";
+    } catch (const std::logic_error &err) {
+      const std::string message = err.what();
+      EXPECT_NE(message.find("LAPACK getrf/getri failed"), std::string::npos);
+      EXPECT_NE(message.find("info = "), std::string::npos);
+    }
+  }
+
+  TEST(LapackMdspanTest, InverseWrapperRejectsNonSquareMatrix) {
+    std::vector<double> a(6);
+
+    try {
+      cytnx::lapack::inverse_inplace(matrix_view<double>(a.data(), 2, 3));
+      FAIL() << "Expected non-square matrix inversion to fail.";
+    } catch (const std::logic_error &err) {
+      const std::string message = err.what();
+      EXPECT_NE(message.find("LAPACK getri input must be square"), std::string::npos);
+    }
+  }
+
   TEST(LapackMdspanTest, VariantSvdValuesDispatchesTensorTAlternatives) {
     cytnx::Tensor a = cytnx::zeros({2, 3}, cytnx::Type.Double);
     a.at<double>({0, 0}) = 3.0;
@@ -364,6 +467,23 @@ namespace {
 
     EXPECT_NEAR(s.at<double>({0}), 4.0, 1e-12);
     EXPECT_NEAR(s.at<double>({1}), 3.0, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, InverseInplaceDispatchesTensorTVariantAndMutatesTensor) {
+    cytnx::Tensor a = cytnx::zeros({2, 2}, cytnx::Type.Double);
+    a.at<double>({0, 0}) = 4.0;
+    a.at<double>({0, 1}) = 7.0;
+    a.at<double>({1, 0}) = 2.0;
+    a.at<double>({1, 1}) = 6.0;
+
+    cytnx::NumericTensor<2> a_view = cytnx::make_right_tensor_t<double, 2>(a);
+
+    cytnx::inverse_inplace(a_view);
+
+    EXPECT_NEAR(a.at<double>({0, 0}), 0.6, 1e-12);
+    EXPECT_NEAR(a.at<double>({0, 1}), -0.7, 1e-12);
+    EXPECT_NEAR(a.at<double>({1, 0}), -0.2, 1e-12);
+    EXPECT_NEAR(a.at<double>({1, 1}), 0.4, 1e-12);
   }
 
   TEST(LapackMdspanTest, PublicSvdValuesAcceptsRawHostMdspans) {
@@ -406,6 +526,22 @@ namespace {
 
     EXPECT_NEAR(diagonal[0], (5.0 - std::sqrt(5.0)) / 2.0, 1e-12);
     EXPECT_NEAR(diagonal[1], (5.0 + std::sqrt(5.0)) / 2.0, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, PublicInverseInplaceAcceptsRawHostMdspan) {
+    std::vector<double> a = {
+      4.0,
+      7.0,
+      2.0,
+      6.0,
+    };
+
+    cytnx::inverse_inplace(matrix_view<double>(a.data(), 2, 2));
+
+    EXPECT_NEAR(a[0], 0.6, 1e-12);
+    EXPECT_NEAR(a[1], -0.7, 1e-12);
+    EXPECT_NEAR(a[2], -0.2, 1e-12);
+    EXPECT_NEAR(a[3], 0.4, 1e-12);
   }
 
 }  // namespace

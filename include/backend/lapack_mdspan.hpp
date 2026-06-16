@@ -68,6 +68,25 @@ namespace cytnx::lapack::fortran {
               const blas_int *ldz, float *work, blas_int *info);
   void dstev_(const char *jobz, const blas_int *n, double *d, double *e, double *z,
               const blas_int *ldz, double *work, blas_int *info);
+
+  void sgetrf_(const blas_int *m, const blas_int *n, float *a, const blas_int *lda, blas_int *ipiv,
+               blas_int *info);
+  void dgetrf_(const blas_int *m, const blas_int *n, double *a, const blas_int *lda, blas_int *ipiv,
+               blas_int *info);
+  void cgetrf_(const blas_int *m, const blas_int *n, std::complex<float> *a, const blas_int *lda,
+               blas_int *ipiv, blas_int *info);
+  void zgetrf_(const blas_int *m, const blas_int *n, std::complex<double> *a, const blas_int *lda,
+               blas_int *ipiv, blas_int *info);
+
+  void sgetri_(const blas_int *n, float *a, const blas_int *lda, const blas_int *ipiv, float *work,
+               const blas_int *lwork, blas_int *info);
+  void dgetri_(const blas_int *n, double *a, const blas_int *lda, const blas_int *ipiv,
+               double *work, const blas_int *lwork, blas_int *info);
+  void cgetri_(const blas_int *n, std::complex<float> *a, const blas_int *lda, const blas_int *ipiv,
+               std::complex<float> *work, const blas_int *lwork, blas_int *info);
+  void zgetri_(const blas_int *n, std::complex<double> *a, const blas_int *lda,
+               const blas_int *ipiv, std::complex<double> *work, const blas_int *lwork,
+               blas_int *info);
   }
 
 }  // namespace cytnx::lapack::fortran
@@ -232,6 +251,48 @@ namespace cytnx::lapack {
       inline void stev(const char *jobz, const blas_int *n, double *d, double *e, double *z,
                        const blas_int *ldz, double *work, blas_int *info) {
         fortran::dstev_(jobz, n, d, e, z, ldz, work, info);
+      }
+
+      inline void getrf(const blas_int *m, const blas_int *n, float *a, const blas_int *lda,
+                        blas_int *ipiv, blas_int *info) {
+        fortran::sgetrf_(m, n, a, lda, ipiv, info);
+      }
+
+      inline void getrf(const blas_int *m, const blas_int *n, double *a, const blas_int *lda,
+                        blas_int *ipiv, blas_int *info) {
+        fortran::dgetrf_(m, n, a, lda, ipiv, info);
+      }
+
+      inline void getrf(const blas_int *m, const blas_int *n, std::complex<float> *a,
+                        const blas_int *lda, blas_int *ipiv, blas_int *info) {
+        fortran::cgetrf_(m, n, a, lda, ipiv, info);
+      }
+
+      inline void getrf(const blas_int *m, const blas_int *n, std::complex<double> *a,
+                        const blas_int *lda, blas_int *ipiv, blas_int *info) {
+        fortran::zgetrf_(m, n, a, lda, ipiv, info);
+      }
+
+      inline void getri(const blas_int *n, float *a, const blas_int *lda, const blas_int *ipiv,
+                        float *work, const blas_int *lwork, blas_int *info) {
+        fortran::sgetri_(n, a, lda, ipiv, work, lwork, info);
+      }
+
+      inline void getri(const blas_int *n, double *a, const blas_int *lda, const blas_int *ipiv,
+                        double *work, const blas_int *lwork, blas_int *info) {
+        fortran::dgetri_(n, a, lda, ipiv, work, lwork, info);
+      }
+
+      inline void getri(const blas_int *n, std::complex<float> *a, const blas_int *lda,
+                        const blas_int *ipiv, std::complex<float> *work, const blas_int *lwork,
+                        blas_int *info) {
+        fortran::cgetri_(n, a, lda, ipiv, work, lwork, info);
+      }
+
+      inline void getri(const blas_int *n, std::complex<double> *a, const blas_int *lda,
+                        const blas_int *ipiv, std::complex<double> *work, const blas_int *lwork,
+                        blas_int *info) {
+        fortran::zgetri_(n, a, lda, ipiv, work, lwork, info);
       }
 
     }  // namespace native
@@ -446,6 +507,35 @@ namespace cytnx::lapack {
       return info;
     }
 
+    template <LapackMatrix Matrix>
+    int getri_inplace(Matrix a) {
+      using scalar_type = typename Matrix::element_type;
+
+      const auto n = a.extent(0);
+      cytnx_error_msg(a.extent(1) != n, "[ERROR] LAPACK getri input must be square.%s", "\n");
+
+      const blas_int native_n = detail::to_blas_int(n, "n");
+      const blas_int lda = std::max<blas_int>(1, native_n);
+      blas_int info = 0;
+      std::vector<blas_int> pivots(n);
+
+      native::getrf(&native_n, &native_n, a.data_handle(), &lda, pivots.data(), &info);
+      if (info != 0) return info;
+
+      blas_int lwork = -1;
+      scalar_type work_query{};
+      native::getri(&native_n, a.data_handle(), &lda, pivots.data(), &work_query, &lwork, &info);
+      if (info != 0) return info;
+      if constexpr (RealLapackScalar<scalar_type>) {
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+      } else {
+        lwork = std::max<blas_int>(1, static_cast<blas_int>(std::real(work_query)));
+      }
+      std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+      native::getri(&native_n, a.data_handle(), &lda, pivots.data(), work.data(), &lwork, &info);
+      return info;
+    }
+
   }  // namespace lowlevel
 
   namespace detail {
@@ -541,6 +631,18 @@ namespace cytnx::lapack {
   void symmetric_tridiagonal_eigh_values(Diagonal diagonal, OffDiagonal offdiagonal) {
     detail::check_lapack_info("stev", lowlevel::stev_values(diagonal, offdiagonal), diagonal,
                               offdiagonal);
+  }
+
+  /**
+   * @brief Invert a square matrix in place with checked host LAPACK diagnostics.
+   *
+   * The wrapper has row-major logical semantics. Internally LAPACK factorizes the transposed
+   * column-major view, and the resulting inverse is again represented as a row-major logical
+   * matrix.
+   */
+  template <LapackMatrix Matrix>
+  void inverse_inplace(Matrix a) {
+    detail::check_lapack_info("getrf/getri", lowlevel::getri_inplace(a), a);
   }
 
 }  // namespace cytnx::lapack
