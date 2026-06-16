@@ -16,35 +16,50 @@ namespace cytnx {
   namespace linalg_mdspan_detail {
 
     struct call_svd_values {
-      template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-        requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
-      void operator()(Matrix matrix, Vector values) const {
-        lapack::svd_values(matrix, values);
+      template <class Matrix, class Vector>
+        requires requires(Matrix &&matrix, Vector &&values) {
+          lapack::svd_values(std::forward<Matrix>(matrix), std::forward<Vector>(values));
+        }
+      void operator()(Matrix &&matrix, Vector &&values) const {
+        lapack::svd_values(std::forward<Matrix>(matrix), std::forward<Vector>(values));
       }
     };
 
     struct call_svd {
-      template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector,
-                lapack::LapackMatrix LeftSingularVectors, lapack::LapackMatrix RightSingularVectors>
-        requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
-                 mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
-      void operator()(Matrix matrix, Vector values, LeftSingularVectors left,
-                      RightSingularVectors right) const {
-        lapack::svd(matrix, values, left, right);
+      template <class Matrix, class Vector, class LeftSingularVectors, class RightSingularVectors>
+        requires requires(Matrix &&matrix, Vector &&values, LeftSingularVectors &&left,
+                          RightSingularVectors &&right) {
+          lapack::svd(std::forward<Matrix>(matrix), std::forward<Vector>(values),
+                      std::forward<LeftSingularVectors>(left),
+                      std::forward<RightSingularVectors>(right));
+        }
+      void operator()(Matrix &&matrix, Vector &&values, LeftSingularVectors &&left,
+                      RightSingularVectors &&right) const {
+        lapack::svd(std::forward<Matrix>(matrix), std::forward<Vector>(values),
+                    std::forward<LeftSingularVectors>(left),
+                    std::forward<RightSingularVectors>(right));
       }
     };
 
     struct call_self_adjoint_eigh {
-      template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-        requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
-      void operator()(Matrix matrix, Vector values) const {
-        lapack::self_adjoint_eigh('N', 'U', matrix, values);
+      template <class Matrix, class Vector>
+        requires requires(Matrix &&matrix, Vector &&values) {
+          lapack::self_adjoint_eigh('N', 'U', std::forward<Matrix>(matrix),
+                                    std::forward<Vector>(values));
+        }
+      void operator()(Matrix &&matrix, Vector &&values) const {
+        lapack::self_adjoint_eigh('N', 'U', std::forward<Matrix>(matrix),
+                                  std::forward<Vector>(values));
       }
 
-      template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-        requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
-      void operator()(char jobz, char uplo, Matrix matrix, Vector values) const {
-        lapack::self_adjoint_eigh(jobz, uplo, matrix, values);
+      template <class Matrix, class Vector>
+        requires requires(char jobz, char uplo, Matrix &&matrix, Vector &&values) {
+          lapack::self_adjoint_eigh(jobz, uplo, std::forward<Matrix>(matrix),
+                                    std::forward<Vector>(values));
+        }
+      void operator()(char jobz, char uplo, Matrix &&matrix, Vector &&values) const {
+        lapack::self_adjoint_eigh(jobz, uplo, std::forward<Matrix>(matrix),
+                                  std::forward<Vector>(values));
       }
     };
 
