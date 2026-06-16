@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -46,6 +47,7 @@ namespace {
   static_assert(cytnx::lapack::MutableRealLapackVector<vector_view<double>>);
   static_assert(!cytnx::lapack::MutableRealLapackVector<vector_view<const double>>);
   static_assert(cytnx::lapack::ComplexLapackVector<vector_view<std::complex<float>>>);
+  static_assert(cytnx::lapack::MutableComplexLapackMatrix<matrix_view<std::complex<float>>>);
   static_assert(
     cytnx::mdspan_concepts::SameElementType<matrix_view<const double>, matrix_view<double>>);
   static_assert(cytnx::mdspan_concepts::SameElementType<matrix_view<std::complex<double>>,
@@ -74,6 +76,21 @@ namespace {
   void run_kernel(DispatchRvalueKernel, DispatchA &&) {}
 
   template <class T>
+  struct is_std_complex : std::false_type {};
+
+  template <class T>
+  struct is_std_complex<std::complex<T>> : std::true_type {};
+
+  template <class T>
+  auto conjugate_scalar(const T &value) {
+    if constexpr (is_std_complex<T>::value) {
+      return std::conj(value);
+    } else {
+      return value;
+    }
+  }
+
+  template <class T>
   bool has_eigenvalue_near(const std::vector<std::complex<T>> &values, std::complex<T> expected,
                            T tolerance) {
     for (const auto &value : values) {
@@ -82,10 +99,10 @@ namespace {
     return false;
   }
 
-  template <class T>
+  template <class T, class Real>
   void expect_qr_reconstructs(const std::vector<T> &original, const std::vector<T> &q,
                               const std::vector<T> &r, std::size_t rows, std::size_t cols,
-                              T tolerance) {
+                              Real tolerance) {
     const std::size_t k = std::min(rows, cols);
     for (std::size_t i = 0; i < rows; ++i) {
       for (std::size_t j = 0; j < cols; ++j) {
@@ -93,24 +110,24 @@ namespace {
         for (std::size_t p = 0; p < k; ++p) {
           reconstructed += q[i * k + p] * r[p * cols + j];
         }
-        EXPECT_NEAR(reconstructed, original[i * cols + j], tolerance);
+        EXPECT_NEAR(std::abs(reconstructed - original[i * cols + j]), Real{}, tolerance);
       }
     }
     for (std::size_t i = 0; i < k; ++i) {
       for (std::size_t j = 0; j < k; ++j) {
         T inner{};
         for (std::size_t p = 0; p < rows; ++p) {
-          inner += q[p * k + i] * q[p * k + j];
+          inner += conjugate_scalar(q[p * k + i]) * q[p * k + j];
         }
-        EXPECT_NEAR(inner, i == j ? T{1} : T{0}, tolerance);
+        EXPECT_NEAR(std::abs(inner - (i == j ? T{1} : T{})), Real{}, tolerance);
       }
     }
   }
 
-  template <class T>
+  template <class T, class Real>
   void expect_lq_reconstructs(const std::vector<T> &original, const std::vector<T> &l,
                               const std::vector<T> &q, std::size_t rows, std::size_t cols,
-                              T tolerance) {
+                              Real tolerance) {
     const std::size_t k = std::min(rows, cols);
     for (std::size_t i = 0; i < rows; ++i) {
       for (std::size_t j = 0; j < cols; ++j) {
@@ -118,16 +135,16 @@ namespace {
         for (std::size_t p = 0; p < k; ++p) {
           reconstructed += l[i * k + p] * q[p * cols + j];
         }
-        EXPECT_NEAR(reconstructed, original[i * cols + j], tolerance);
+        EXPECT_NEAR(std::abs(reconstructed - original[i * cols + j]), Real{}, tolerance);
       }
     }
     for (std::size_t i = 0; i < k; ++i) {
       for (std::size_t j = 0; j < k; ++j) {
         T inner{};
         for (std::size_t p = 0; p < cols; ++p) {
-          inner += q[i * cols + p] * q[j * cols + p];
+          inner += q[i * cols + p] * conjugate_scalar(q[j * cols + p]);
         }
-        EXPECT_NEAR(inner, i == j ? T{1} : T{0}, tolerance);
+        EXPECT_NEAR(std::abs(inner - (i == j ? T{1} : T{})), Real{}, tolerance);
       }
     }
   }
@@ -551,6 +568,40 @@ namespace {
 
     cytnx::lq(matrix_view<const float>(a.data(), 2, 3), matrix_view<float>(l.data(), 2, 2),
               matrix_view<float>(q.data(), 2, 3));
+
+    EXPECT_EQ(a, original);
+    expect_lq_reconstructs(original, l, q, 2, 3, 1e-5F);
+  }
+
+  TEST(LapackMdspanTest, QrFactorizesComplexMatrix) {
+    using complex = std::complex<double>;
+    const std::vector<complex> original = {
+      complex{1.0, 1.0},  complex{2.0, -1.0}, complex{3.0, 0.5},
+      complex{-1.0, 0.0}, complex{4.0, 2.0},  complex{0.0, -3.0},
+    };
+    std::vector<complex> a = original;
+    std::vector<complex> q(3 * 2);
+    std::vector<complex> r(2 * 2);
+
+    cytnx::qr(matrix_view<const complex>(a.data(), 3, 2), matrix_view<complex>(q.data(), 3, 2),
+              matrix_view<complex>(r.data(), 2, 2));
+
+    EXPECT_EQ(a, original);
+    expect_qr_reconstructs(original, q, r, 3, 2, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, LqFactorizesComplexFloatMatrix) {
+    using complex = std::complex<float>;
+    const std::vector<complex> original = {
+      complex{1.0F, 0.5F},  complex{-2.0F, 1.0F}, complex{3.0F, 0.0F},
+      complex{4.0F, -1.0F}, complex{0.5F, 2.0F},  complex{-1.0F, -0.5F},
+    };
+    std::vector<complex> a = original;
+    std::vector<complex> l(2 * 2);
+    std::vector<complex> q(2 * 3);
+
+    cytnx::lq(matrix_view<const complex>(a.data(), 2, 3), matrix_view<complex>(l.data(), 2, 2),
+              matrix_view<complex>(q.data(), 2, 3));
 
     EXPECT_EQ(a, original);
     expect_lq_reconstructs(original, l, q, 2, 3, 1e-5F);

@@ -107,15 +107,15 @@ namespace cytnx::linalg_mdspan_backend {
     lapack::inverse_inplace(matrix);
   }
 
-  template <lapack::RealLapackMatrix Matrix, lapack::MutableRealLapackMatrix QMatrix,
-            lapack::MutableRealLapackMatrix RMatrix>
+  template <lapack::LapackMatrix Matrix, lapack::MutableLapackMatrix QMatrix,
+            lapack::MutableLapackMatrix RMatrix>
     requires mdspan_concepts::SameElementType<Matrix, QMatrix, RMatrix>
   void run_kernel(qr_kernel, Matrix matrix, QMatrix q, RMatrix r) {
     lapack::qr(matrix, q, r);
   }
 
-  template <lapack::RealLapackMatrix Matrix, lapack::MutableRealLapackMatrix LMatrix,
-            lapack::MutableRealLapackMatrix QMatrix>
+  template <lapack::LapackMatrix Matrix, lapack::MutableLapackMatrix LMatrix,
+            lapack::MutableLapackMatrix QMatrix>
     requires mdspan_concepts::SameElementType<Matrix, LMatrix, QMatrix>
   void run_kernel(lq_kernel, Matrix matrix, LMatrix l, QMatrix q) {
     lapack::lq(matrix, l, q);
