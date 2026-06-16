@@ -26,26 +26,6 @@ namespace cytnx {
     template <class T>
     concept Variant = is_variant<std::remove_cvref_t<T>>::value;
 
-    template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-      requires lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>>
-    void svd_values_impl(Matrix a, Vector s) {
-      lapack::svd_values(a, s);
-    }
-
-    template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector,
-              lapack::LapackMatrix LeftSingularVectors, lapack::LapackMatrix RightSingularVectors>
-      requires lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>> &&
-               lapack::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
-    void svd_impl(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
-      lapack::svd(a, s, u, vt);
-    }
-
-    template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-      requires lapack::SameElementType<Vector, lapack::RealElementOf<Matrix>>
-    void self_adjoint_eigh_impl(char jobz, char uplo, Matrix a, Vector w) {
-      lapack::self_adjoint_eigh(jobz, uplo, a, w);
-    }
-
   }  // namespace linalg_mdspan_detail
 
   /**
@@ -55,9 +35,9 @@ namespace cytnx {
    * without exposing CUDA details to callers.
    */
   template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-    requires requires(Matrix a, Vector s) { linalg_mdspan_detail::svd_values_impl(a, s); }
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void svd_values(Matrix a, Vector s) {
-    linalg_mdspan_detail::svd_values_impl(a, s);
+    lapack::svd_values(a, s);
   }
 
   /// Variant-lifted overload of `svd_values`.
@@ -66,8 +46,8 @@ namespace cytnx {
   void svd_values(MatrixVariant &a, VectorVariant &s) {
     std::visit(
       [](auto &matrix, auto &values) {
-        if constexpr (requires { linalg_mdspan_detail::svd_values_impl(matrix, values); }) {
-          linalg_mdspan_detail::svd_values_impl(matrix, values);
+        if constexpr (requires { cytnx::svd_values(matrix, values); }) {
+          cytnx::svd_values(matrix, values);
         } else {
           cytnx_error_msg(true,
                           "[ERROR] svd_values variant alternatives have incompatible dtype, "
@@ -86,11 +66,10 @@ namespace cytnx {
    */
   template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector,
             lapack::LapackMatrix LeftSingularVectors, lapack::LapackMatrix RightSingularVectors>
-    requires requires(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
-      linalg_mdspan_detail::svd_impl(a, s, u, vt);
-    }
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+             mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
   void svd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
-    linalg_mdspan_detail::svd_impl(a, s, u, vt);
+    lapack::svd(a, s, u, vt);
   }
 
   /// Variant-lifted overload of `svd`.
@@ -102,8 +81,8 @@ namespace cytnx {
            RightSingularVectorsVariant &vt) {
     std::visit(
       [](auto &matrix, auto &values, auto &left, auto &right) {
-        if constexpr (requires { linalg_mdspan_detail::svd_impl(matrix, values, left, right); }) {
-          linalg_mdspan_detail::svd_impl(matrix, values, left, right);
+        if constexpr (requires { cytnx::svd(matrix, values, left, right); }) {
+          cytnx::svd(matrix, values, left, right);
         } else {
           cytnx_error_msg(true,
                           "[ERROR] svd variant alternatives have incompatible dtype, layout, rank, "
@@ -121,11 +100,9 @@ namespace cytnx {
    * the column-major LAPACK backend.
    */
   template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
-    requires requires(char jobz, char uplo, Matrix a, Vector w) {
-      linalg_mdspan_detail::self_adjoint_eigh_impl(jobz, uplo, a, w);
-    }
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void self_adjoint_eigh(char jobz, char uplo, Matrix a, Vector w) {
-    linalg_mdspan_detail::self_adjoint_eigh_impl(jobz, uplo, a, w);
+    lapack::self_adjoint_eigh(jobz, uplo, a, w);
   }
 
   /// Variant-lifted overload of `self_adjoint_eigh`.
@@ -134,10 +111,8 @@ namespace cytnx {
   void self_adjoint_eigh(char jobz, char uplo, MatrixVariant &a, VectorVariant &w) {
     std::visit(
       [jobz, uplo](auto &matrix, auto &values) {
-        if constexpr (requires {
-                        linalg_mdspan_detail::self_adjoint_eigh_impl(jobz, uplo, matrix, values);
-                      }) {
-          linalg_mdspan_detail::self_adjoint_eigh_impl(jobz, uplo, matrix, values);
+        if constexpr (requires { cytnx::self_adjoint_eigh(jobz, uplo, matrix, values); }) {
+          cytnx::self_adjoint_eigh(jobz, uplo, matrix, values);
         } else {
           cytnx_error_msg(true,
                           "[ERROR] self_adjoint_eigh variant alternatives have incompatible dtype, "

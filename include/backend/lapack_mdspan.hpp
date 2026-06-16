@@ -55,19 +55,6 @@ namespace cytnx::lapack {
 
   namespace detail {
 
-    template <class T>
-    struct real_scalar {
-      using type = T;
-    };
-
-    template <class T>
-    struct real_scalar<std::complex<T>> {
-      using type = T;
-    };
-
-    template <class T>
-    using real_scalar_t = typename real_scalar<std::remove_cv_t<T>>::type;
-
     inline blas_int to_blas_int(std::size_t value, const char *name) {
       cytnx_error_msg(value > static_cast<std::size_t>(std::numeric_limits<blas_int>::max()),
                       "[ERROR] LAPACK dimension %s exceeds blas_int range.%s", name, "\n");
@@ -117,15 +104,6 @@ namespace cytnx::lapack {
   template <class View>
   concept ComplexLapackMatrix =
     LapackMatrix<View> && ComplexLapackScalar<typename View::element_type>;
-
-  template <class First, class... Rest>
-  concept SameElementType =
-    (... && std::same_as<typename First::element_type, typename Rest::element_type>);
-
-  template <class View>
-  struct RealElementOf {
-    using element_type = detail::real_scalar_t<typename View::element_type>;
-  };
 
   namespace lowlevel {
 
@@ -190,10 +168,10 @@ namespace cytnx::lapack {
     }  // namespace native
 
     template <LapackMatrix Matrix, RealLapackVector Vector>
-      requires SameElementType<Vector, RealElementOf<Matrix>>
+      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
     int gesvd(Matrix a, Vector s) {
       using scalar_type = typename Matrix::element_type;
-      using real_type = detail::real_scalar_t<scalar_type>;
+      using real_type = mdspan_concepts::real_element_t<scalar_type>;
 
       const auto rows = a.extent(0);
       const auto cols = a.extent(1);
@@ -235,11 +213,11 @@ namespace cytnx::lapack {
 
     template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
               LapackMatrix RightSingularVectors>
-      requires SameElementType<Vector, RealElementOf<Matrix>> &&
-               SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
+      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+               mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
     int gesvd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
       using scalar_type = typename Matrix::element_type;
-      using real_type = detail::real_scalar_t<scalar_type>;
+      using real_type = mdspan_concepts::real_element_t<scalar_type>;
 
       const auto rows = a.extent(0);
       const auto cols = a.extent(1);
@@ -289,10 +267,10 @@ namespace cytnx::lapack {
     }
 
     template <LapackMatrix Matrix, RealLapackVector Vector>
-      requires SameElementType<Vector, RealElementOf<Matrix>>
+      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
     int eigh(char jobz, char uplo, Matrix a, Vector w) {
       using scalar_type = typename Matrix::element_type;
-      using real_type = detail::real_scalar_t<scalar_type>;
+      using real_type = mdspan_concepts::real_element_t<scalar_type>;
 
       const auto n = a.extent(0);
       cytnx_error_msg(a.extent(1) != n, "[ERROR] LAPACK eigh input must be square.%s", "\n");
@@ -379,7 +357,7 @@ namespace cytnx::lapack {
    * @brief Compute singular values with checked host LAPACK diagnostics.
    */
   template <LapackMatrix Matrix, RealLapackVector Vector>
-    requires SameElementType<Vector, RealElementOf<Matrix>>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void svd_values(Matrix a, Vector s) {
     detail::check_lapack_info("gesvd", lowlevel::gesvd(a, s), a, s);
   }
@@ -389,8 +367,8 @@ namespace cytnx::lapack {
    */
   template <LapackMatrix Matrix, RealLapackVector Vector, LapackMatrix LeftSingularVectors,
             LapackMatrix RightSingularVectors>
-    requires SameElementType<Vector, RealElementOf<Matrix>> &&
-             SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+             mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
   void svd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
     detail::check_lapack_info("gesvd", lowlevel::gesvd(a, s, u, vt), a, s, u, vt);
   }
@@ -400,7 +378,7 @@ namespace cytnx::lapack {
    * diagnostics.
    */
   template <LapackMatrix Matrix, RealLapackVector Vector>
-    requires SameElementType<Vector, RealElementOf<Matrix>>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void self_adjoint_eigh(char jobz, char uplo, Matrix a, Vector w) {
     detail::check_lapack_info("eigh", lowlevel::eigh(jobz, uplo, a, w), a, w);
   }

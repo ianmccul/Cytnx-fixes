@@ -35,12 +35,12 @@ namespace {
   static_assert(cytnx::lapack::LapackVector<vector_view<float>>);
   static_assert(cytnx::lapack::RealLapackVector<vector_view<double>>);
   static_assert(cytnx::lapack::ComplexLapackVector<vector_view<std::complex<float>>>);
-  static_assert(cytnx::lapack::SameElementType<matrix_view<std::complex<double>>,
-                                               matrix_view<std::complex<double>>,
-                                               matrix_view<std::complex<double>>>);
-  static_assert(
-    cytnx::lapack::SameElementType<
-      vector_view<double>, cytnx::lapack::RealElementOf<matrix_view<std::complex<double>>>>);
+  static_assert(cytnx::mdspan_concepts::SameElementType<matrix_view<std::complex<double>>,
+                                                        matrix_view<std::complex<double>>,
+                                                        matrix_view<std::complex<double>>>);
+  static_assert(cytnx::mdspan_concepts::SameElementType<
+                vector_view<double>,
+                cytnx::mdspan_concepts::RealElementOf<matrix_view<std::complex<double>>>>);
 
   TEST(LapackMdspanTest, RowMajorSyevComputesEigenvalues) {
     std::vector<double> a = {
