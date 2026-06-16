@@ -20,30 +20,22 @@ namespace cytnx {
   namespace linalg_mdspan_detail {
 
     struct call_svd_values {
-      template <class Matrix, class Vector>
-        requires requires(Matrix &&matrix, Vector &&values) {
-          linalg_mdspan_backend::svd_values(std::forward<Matrix>(matrix),
-                                            std::forward<Vector>(values));
+      template <class... Args>
+        requires requires(Args &&...args) {
+          linalg_mdspan_backend::svd_values(std::forward<Args>(args)...);
         }
-      void operator()(Matrix &&matrix, Vector &&values) const {
-        linalg_mdspan_backend::svd_values(std::forward<Matrix>(matrix),
-                                          std::forward<Vector>(values));
+      void operator()(Args &&...args) const {
+        linalg_mdspan_backend::svd_values(std::forward<Args>(args)...);
       }
     };
 
     struct call_svd {
-      template <class Matrix, class Vector, class LeftSingularVectors, class RightSingularVectors>
-        requires requires(Matrix &&matrix, Vector &&values, LeftSingularVectors &&left,
-                          RightSingularVectors &&right) {
-          linalg_mdspan_backend::svd(std::forward<Matrix>(matrix), std::forward<Vector>(values),
-                                     std::forward<LeftSingularVectors>(left),
-                                     std::forward<RightSingularVectors>(right));
+      template <class... Args>
+        requires requires(Args &&...args) {
+          linalg_mdspan_backend::svd(std::forward<Args>(args)...);
         }
-      void operator()(Matrix &&matrix, Vector &&values, LeftSingularVectors &&left,
-                      RightSingularVectors &&right) const {
-        linalg_mdspan_backend::svd(std::forward<Matrix>(matrix), std::forward<Vector>(values),
-                                   std::forward<LeftSingularVectors>(left),
-                                   std::forward<RightSingularVectors>(right));
+      void operator()(Args &&...args) const {
+        linalg_mdspan_backend::svd(std::forward<Args>(args)...);
       }
     };
 
@@ -51,14 +43,12 @@ namespace cytnx {
       char jobz = 'N';
       char uplo = 'U';
 
-      template <class Matrix, class Vector>
-        requires requires(Matrix &&matrix, Vector &&values) {
-          linalg_mdspan_backend::self_adjoint_eigh('N', 'U', std::forward<Matrix>(matrix),
-                                                   std::forward<Vector>(values));
+      template <class... Args>
+        requires requires(Args &&...args) {
+          linalg_mdspan_backend::self_adjoint_eigh('N', 'U', std::forward<Args>(args)...);
         }
-      void operator()(Matrix &&matrix, Vector &&values) const {
-        linalg_mdspan_backend::self_adjoint_eigh(jobz, uplo, std::forward<Matrix>(matrix),
-                                                 std::forward<Vector>(values));
+      void operator()(Args &&...args) const {
+        linalg_mdspan_backend::self_adjoint_eigh(jobz, uplo, std::forward<Args>(args)...);
       }
     };
 
