@@ -78,18 +78,29 @@ namespace cytnx {
       run_kernel(std::forward<F>(f), std::forward<Args>(args)...);
     };
 
+    template <class T>
+    std::string type_name() {
+      return typeid(std::remove_cvref_t<T>).name();
+    }
+
     template <class Kernel>
+    concept has_kernel_name = requires { std::remove_cvref_t<Kernel>::name; };
+
+    template <class Kernel>
+      requires has_kernel_name<Kernel>
     constexpr std::string_view kernel_name() {
-      if constexpr (requires { std::remove_cvref_t<Kernel>::name; }) {
-        return std::remove_cvref_t<Kernel>::name;
-      } else {
-        return typeid(std::remove_cvref_t<Kernel>).name();
-      }
+      return std::remove_cvref_t<Kernel>::name;
+    }
+
+    template <class Kernel>
+      requires(!has_kernel_name<Kernel>)
+    std::string kernel_name() {
+      return type_name<Kernel>();
     }
 
     template <class Arg>
     void append_argument_type(std::ostringstream &out, std::size_t index) {
-      out << "  arg" << index << ": " << typeid(std::remove_cvref_t<Arg>).name() << '\n';
+      out << "  arg" << index << ": " << type_name<Arg>() << '\n';
     }
 
     template <class Kernel, class... Args>
