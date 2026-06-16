@@ -126,11 +126,9 @@ namespace {
     std::vector<double> u(2 * 2);
     std::vector<double> vt(2 * 3);
 
-    const int info = cytnx::lapack::gesvd(
-      matrix_view<double>(a.data(), 2, 3), vector_view<double>(s.data(), 2),
-      matrix_view<double>(u.data(), 2, 2), matrix_view<double>(vt.data(), 2, 3));
+    cytnx::lapack::svd(matrix_view<double>(a.data(), 2, 3), vector_view<double>(s.data(), 2),
+                       matrix_view<double>(u.data(), 2, 2), matrix_view<double>(vt.data(), 2, 3));
 
-    ASSERT_EQ(info, 0);
     for (std::size_t i = 0; i < 2; ++i) {
       for (std::size_t j = 0; j < 3; ++j) {
         double reconstructed = 0.0;
@@ -140,6 +138,35 @@ namespace {
         EXPECT_NEAR(reconstructed, original[i * 3 + j], 1e-12);
       }
     }
+  }
+
+  TEST(LapackMdspanTest, CheckedSvdValuesWrapperComputesSingularValues) {
+    std::vector<double> a = {
+      3.0, 0.0, 0.0, 0.0, 4.0, 0.0,
+    };
+    std::vector<double> s(2);
+
+    cytnx::lapack::svd_values(matrix_view<double>(a.data(), 2, 3),
+                              vector_view<double>(s.data(), 2));
+
+    EXPECT_NEAR(s[0], 4.0, 1e-12);
+    EXPECT_NEAR(s[1], 3.0, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, CheckedSelfAdjointEighWrapperComputesEigenvalues) {
+    std::vector<double> a = {
+      3.0,
+      0.0,
+      0.0,
+      1.0,
+    };
+    std::vector<double> w(2);
+
+    cytnx::lapack::self_adjoint_eigh('N', 'U', matrix_view<double>(a.data(), 2, 2),
+                                     vector_view<double>(w.data(), 2));
+
+    EXPECT_NEAR(w[0], 1.0, 1e-12);
+    EXPECT_NEAR(w[1], 3.0, 1e-12);
   }
 
 }  // namespace
