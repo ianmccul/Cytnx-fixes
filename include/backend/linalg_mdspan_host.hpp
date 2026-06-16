@@ -43,6 +43,14 @@ namespace cytnx::linalg_mdspan_backend {
     static constexpr std::string_view name = "inverse_inplace";
   };
 
+  struct qr_kernel {
+    static constexpr std::string_view name = "qr";
+  };
+
+  struct lq_kernel {
+    static constexpr std::string_view name = "lq";
+  };
+
   template <lapack::LapackMatrix Matrix, lapack::RealLapackVector Vector>
     requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void run_kernel(svd_values_kernel, Matrix matrix, Vector values) {
@@ -95,6 +103,20 @@ namespace cytnx::linalg_mdspan_backend {
   template <lapack::LapackMatrix Matrix>
   void run_kernel(inverse_inplace_kernel, Matrix matrix) {
     lapack::inverse_inplace(matrix);
+  }
+
+  template <lapack::RealLapackMatrix Matrix, lapack::RealLapackMatrix QMatrix,
+            lapack::RealLapackMatrix RMatrix>
+    requires mdspan_concepts::SameElementType<Matrix, QMatrix, RMatrix>
+  void run_kernel(qr_kernel, Matrix matrix, QMatrix q, RMatrix r) {
+    lapack::qr(matrix, q, r);
+  }
+
+  template <lapack::RealLapackMatrix Matrix, lapack::RealLapackMatrix LMatrix,
+            lapack::RealLapackMatrix QMatrix>
+    requires mdspan_concepts::SameElementType<Matrix, LMatrix, QMatrix>
+  void run_kernel(lq_kernel, Matrix matrix, LMatrix l, QMatrix q) {
+    lapack::lq(matrix, l, q);
   }
 
 }  // namespace cytnx::linalg_mdspan_backend

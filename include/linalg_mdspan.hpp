@@ -135,6 +135,32 @@ namespace cytnx {
     invoke_kernel(linalg_mdspan_backend::inverse_inplace_kernel{}, std::forward<MatrixArg>(a));
   }
 
+  /**
+   * @brief Compute the thin QR factorization of a real host layout-right mdspan matrix view.
+   *
+   * Variant arguments dispatch over alternatives and report an error if the active alternatives are
+   * incompatible.
+   */
+  template <class MatrixArg, class QArg, class RArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::qr_kernel, MatrixArg, QArg, RArg>
+  void qr(MatrixArg &&a, QArg &&q, RArg &&r) {
+    invoke_kernel(linalg_mdspan_backend::qr_kernel{}, std::forward<MatrixArg>(a),
+                  std::forward<QArg>(q), std::forward<RArg>(r));
+  }
+
+  /**
+   * @brief Compute the thin LQ factorization of a real host layout-right mdspan matrix view.
+   *
+   * Variant arguments dispatch over alternatives and report an error if the active alternatives are
+   * incompatible.
+   */
+  template <class MatrixArg, class LArg, class QArg>
+    requires AnyDispatchInvocable<linalg_mdspan_backend::lq_kernel, MatrixArg, LArg, QArg>
+  void lq(MatrixArg &&a, LArg &&l, QArg &&q) {
+    invoke_kernel(linalg_mdspan_backend::lq_kernel{}, std::forward<MatrixArg>(a),
+                  std::forward<LArg>(l), std::forward<QArg>(q));
+  }
+
 }  // namespace cytnx
 
 #endif  // BACKEND_TORCH

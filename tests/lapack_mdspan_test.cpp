@@ -73,6 +73,56 @@ namespace {
     return false;
   }
 
+  template <class T>
+  void expect_qr_reconstructs(const std::vector<T> &original, const std::vector<T> &q,
+                              const std::vector<T> &r, std::size_t rows, std::size_t cols,
+                              T tolerance) {
+    const std::size_t k = std::min(rows, cols);
+    for (std::size_t i = 0; i < rows; ++i) {
+      for (std::size_t j = 0; j < cols; ++j) {
+        T reconstructed{};
+        for (std::size_t p = 0; p < k; ++p) {
+          reconstructed += q[i * k + p] * r[p * cols + j];
+        }
+        EXPECT_NEAR(reconstructed, original[i * cols + j], tolerance);
+      }
+    }
+    for (std::size_t i = 0; i < k; ++i) {
+      for (std::size_t j = 0; j < k; ++j) {
+        T inner{};
+        for (std::size_t p = 0; p < rows; ++p) {
+          inner += q[p * k + i] * q[p * k + j];
+        }
+        EXPECT_NEAR(inner, i == j ? T{1} : T{0}, tolerance);
+      }
+    }
+  }
+
+  template <class T>
+  void expect_lq_reconstructs(const std::vector<T> &original, const std::vector<T> &l,
+                              const std::vector<T> &q, std::size_t rows, std::size_t cols,
+                              T tolerance) {
+    const std::size_t k = std::min(rows, cols);
+    for (std::size_t i = 0; i < rows; ++i) {
+      for (std::size_t j = 0; j < cols; ++j) {
+        T reconstructed{};
+        for (std::size_t p = 0; p < k; ++p) {
+          reconstructed += l[i * k + p] * q[p * cols + j];
+        }
+        EXPECT_NEAR(reconstructed, original[i * cols + j], tolerance);
+      }
+    }
+    for (std::size_t i = 0; i < k; ++i) {
+      for (std::size_t j = 0; j < k; ++j) {
+        T inner{};
+        for (std::size_t p = 0; p < cols; ++p) {
+          inner += q[i * cols + p] * q[j * cols + p];
+        }
+        EXPECT_NEAR(inner, i == j ? T{1} : T{0}, tolerance);
+      }
+    }
+  }
+
   static_assert(cytnx::Variant<std::variant<DispatchA, DispatchC>>);
   static_assert(
     cytnx::AnyDispatchInvocable<DispatchKernel, std::variant<DispatchC, DispatchA> &, DispatchB &>);
@@ -434,6 +484,86 @@ namespace {
     } catch (const std::logic_error &err) {
       const std::string message = err.what();
       EXPECT_NE(message.find("LAPACK gesdd singular-value output is too small"), std::string::npos);
+    }
+  }
+
+  TEST(LapackMdspanTest, QrFactorizesTallRealMatrix) {
+    const std::vector<double> original = {
+      1.0, 2.0, 3.0, 4.0, 5.0, 7.0,
+    };
+    std::vector<double> a = original;
+    std::vector<double> q(3 * 2);
+    std::vector<double> r(2 * 2);
+
+    cytnx::lapack::qr(matrix_view<double>(a.data(), 3, 2), matrix_view<double>(q.data(), 3, 2),
+                      matrix_view<double>(r.data(), 2, 2));
+
+    EXPECT_EQ(a, original);
+    expect_qr_reconstructs(original, q, r, 3, 2, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, QrFactorizesWideFloatMatrix) {
+    const std::vector<float> original = {
+      1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 7.0F,
+    };
+    std::vector<float> a = original;
+    std::vector<float> q(2 * 2);
+    std::vector<float> r(2 * 3);
+
+    cytnx::qr(matrix_view<float>(a.data(), 2, 3), matrix_view<float>(q.data(), 2, 2),
+              matrix_view<float>(r.data(), 2, 3));
+
+    EXPECT_EQ(a, original);
+    expect_qr_reconstructs(original, q, r, 2, 3, 1e-5F);
+  }
+
+  TEST(LapackMdspanTest, LqFactorizesTallRealMatrix) {
+    const std::vector<double> original = {
+      1.0, 2.0, 3.0, 4.0, 5.0, 7.0,
+    };
+    std::vector<double> a = original;
+    std::vector<double> l(3 * 2);
+    std::vector<double> q(2 * 2);
+
+    cytnx::lapack::lq(matrix_view<double>(a.data(), 3, 2), matrix_view<double>(l.data(), 3, 2),
+                      matrix_view<double>(q.data(), 2, 2));
+
+    EXPECT_EQ(a, original);
+    expect_lq_reconstructs(original, l, q, 3, 2, 1e-12);
+  }
+
+  TEST(LapackMdspanTest, LqFactorizesWideFloatMatrix) {
+    const std::vector<float> original = {
+      1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 7.0F,
+    };
+    std::vector<float> a = original;
+    std::vector<float> l(2 * 2);
+    std::vector<float> q(2 * 3);
+
+    cytnx::lq(matrix_view<float>(a.data(), 2, 3), matrix_view<float>(l.data(), 2, 2),
+              matrix_view<float>(q.data(), 2, 3));
+
+    EXPECT_EQ(a, original);
+    expect_lq_reconstructs(original, l, q, 2, 3, 1e-5F);
+  }
+
+  TEST(LapackMdspanTest, QrRejectsIncompatibleOutputShape) {
+    std::vector<double> a = {
+      1.0,
+      2.0,
+      3.0,
+      4.0,
+    };
+    std::vector<double> q(2);
+    std::vector<double> r(4);
+
+    try {
+      cytnx::qr(matrix_view<double>(a.data(), 2, 2), matrix_view<double>(q.data(), 2, 1),
+                matrix_view<double>(r.data(), 2, 2));
+      FAIL() << "Expected incompatible QR output shape to fail.";
+    } catch (const std::logic_error &err) {
+      const std::string message = err.what();
+      EXPECT_NE(message.find("LAPACK qr Q output has incompatible shape"), std::string::npos);
     }
   }
 

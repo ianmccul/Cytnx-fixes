@@ -104,6 +104,28 @@ namespace cytnx::lapack::fortran {
   void zgetri_(const blas_int *n, std::complex<double> *a, const blas_int *lda,
                const blas_int *ipiv, std::complex<double> *work, const blas_int *lwork,
                blas_int *info);
+
+  void sgelqf_(const blas_int *m, const blas_int *n, float *a, const blas_int *lda, float *tau,
+               float *work, const blas_int *lwork, blas_int *info);
+  void dgelqf_(const blas_int *m, const blas_int *n, double *a, const blas_int *lda, double *tau,
+               double *work, const blas_int *lwork, blas_int *info);
+  void sorglq_(const blas_int *m, const blas_int *n, const blas_int *k, float *a,
+               const blas_int *lda, const float *tau, float *work, const blas_int *lwork,
+               blas_int *info);
+  void dorglq_(const blas_int *m, const blas_int *n, const blas_int *k, double *a,
+               const blas_int *lda, const double *tau, double *work, const blas_int *lwork,
+               blas_int *info);
+
+  void sgeqrf_(const blas_int *m, const blas_int *n, float *a, const blas_int *lda, float *tau,
+               float *work, const blas_int *lwork, blas_int *info);
+  void dgeqrf_(const blas_int *m, const blas_int *n, double *a, const blas_int *lda, double *tau,
+               double *work, const blas_int *lwork, blas_int *info);
+  void sorgqr_(const blas_int *m, const blas_int *n, const blas_int *k, float *a,
+               const blas_int *lda, const float *tau, float *work, const blas_int *lwork,
+               blas_int *info);
+  void dorgqr_(const blas_int *m, const blas_int *n, const blas_int *k, double *a,
+               const blas_int *lda, const double *tau, double *work, const blas_int *lwork,
+               blas_int *info);
   }
 
 }  // namespace cytnx::lapack::fortran
@@ -340,6 +362,50 @@ namespace cytnx::lapack {
                         const blas_int *ipiv, std::complex<double> *work, const blas_int *lwork,
                         blas_int *info) {
         fortran::zgetri_(n, a, lda, ipiv, work, lwork, info);
+      }
+
+      inline void gelqf(const blas_int *m, const blas_int *n, float *a, const blas_int *lda,
+                        float *tau, float *work, const blas_int *lwork, blas_int *info) {
+        fortran::sgelqf_(m, n, a, lda, tau, work, lwork, info);
+      }
+
+      inline void gelqf(const blas_int *m, const blas_int *n, double *a, const blas_int *lda,
+                        double *tau, double *work, const blas_int *lwork, blas_int *info) {
+        fortran::dgelqf_(m, n, a, lda, tau, work, lwork, info);
+      }
+
+      inline void orglq(const blas_int *m, const blas_int *n, const blas_int *k, float *a,
+                        const blas_int *lda, const float *tau, float *work, const blas_int *lwork,
+                        blas_int *info) {
+        fortran::sorglq_(m, n, k, a, lda, tau, work, lwork, info);
+      }
+
+      inline void orglq(const blas_int *m, const blas_int *n, const blas_int *k, double *a,
+                        const blas_int *lda, const double *tau, double *work, const blas_int *lwork,
+                        blas_int *info) {
+        fortran::dorglq_(m, n, k, a, lda, tau, work, lwork, info);
+      }
+
+      inline void geqrf(const blas_int *m, const blas_int *n, float *a, const blas_int *lda,
+                        float *tau, float *work, const blas_int *lwork, blas_int *info) {
+        fortran::sgeqrf_(m, n, a, lda, tau, work, lwork, info);
+      }
+
+      inline void geqrf(const blas_int *m, const blas_int *n, double *a, const blas_int *lda,
+                        double *tau, double *work, const blas_int *lwork, blas_int *info) {
+        fortran::dgeqrf_(m, n, a, lda, tau, work, lwork, info);
+      }
+
+      inline void orgqr(const blas_int *m, const blas_int *n, const blas_int *k, float *a,
+                        const blas_int *lda, const float *tau, float *work, const blas_int *lwork,
+                        blas_int *info) {
+        fortran::sorgqr_(m, n, k, a, lda, tau, work, lwork, info);
+      }
+
+      inline void orgqr(const blas_int *m, const blas_int *n, const blas_int *k, double *a,
+                        const blas_int *lda, const double *tau, double *work, const blas_int *lwork,
+                        blas_int *info) {
+        fortran::dorgqr_(m, n, k, a, lda, tau, work, lwork, info);
       }
 
     }  // namespace native
@@ -685,6 +751,132 @@ namespace cytnx::lapack {
       return info;
     }
 
+    template <RealLapackMatrix Matrix, RealLapackMatrix QMatrix, RealLapackMatrix RMatrix>
+      requires mdspan_concepts::SameElementType<Matrix, QMatrix, RMatrix>
+    int qr(Matrix a, QMatrix q, RMatrix r) {
+      using scalar_type = typename Matrix::element_type;
+
+      const auto rows = a.extent(0);
+      const auto cols = a.extent(1);
+      const auto k = std::min(rows, cols);
+      cytnx_error_msg(q.extent(0) < rows || q.extent(1) < k,
+                      "[ERROR] LAPACK qr Q output has incompatible shape.%s", "\n");
+      cytnx_error_msg(r.extent(0) < k || r.extent(1) < cols,
+                      "[ERROR] LAPACK qr R output has incompatible shape.%s", "\n");
+
+      const blas_int native_rows = detail::to_blas_int(cols, "cols");
+      const blas_int native_cols = detail::to_blas_int(rows, "rows");
+      const blas_int native_k = detail::to_blas_int(k, "k");
+      const blas_int lda = std::max<blas_int>(1, native_rows);
+      blas_int info = 0;
+      blas_int lwork = -1;
+      std::vector<scalar_type> buffer(rows * cols);
+      for (std::size_t i = 0; i < rows; ++i) {
+        for (std::size_t j = 0; j < cols; ++j) buffer[i * cols + j] = a(i, j);
+      }
+      std::vector<scalar_type> tau(k);
+
+      // layout_right stores logical A as the column-major matrix A^T for native LAPACK.
+      // Therefore logical QR(A) is obtained from LQ(A^T): A^T = L_t Q_t, so
+      // A = Q_t^T L_t^T.
+      scalar_type work_query{};
+      native::gelqf(&native_rows, &native_cols, buffer.data(), &lda, tau.data(), &work_query,
+                    &lwork, &info);
+      if (info != 0) return info;
+      lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+      std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+      native::gelqf(&native_rows, &native_cols, buffer.data(), &lda, tau.data(), work.data(),
+                    &lwork, &info);
+      if (info != 0) return info;
+
+      for (std::size_t i = 0; i < k; ++i) {
+        for (std::size_t j = 0; j < cols; ++j) {
+          r(i, j) = j >= i ? buffer[j + i * static_cast<std::size_t>(lda)] : scalar_type{};
+        }
+      }
+
+      lwork = -1;
+      native::orglq(&native_k, &native_cols, &native_k, buffer.data(), &lda, tau.data(),
+                    &work_query, &lwork, &info);
+      if (info != 0) return info;
+      lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+      work.assign(static_cast<std::size_t>(lwork), scalar_type{});
+      native::orglq(&native_k, &native_cols, &native_k, buffer.data(), &lda, tau.data(),
+                    work.data(), &lwork, &info);
+      if (info != 0) return info;
+
+      for (std::size_t i = 0; i < rows; ++i) {
+        for (std::size_t j = 0; j < k; ++j) {
+          q(i, j) = buffer[j + i * static_cast<std::size_t>(lda)];
+        }
+      }
+
+      return info;
+    }
+
+    template <RealLapackMatrix Matrix, RealLapackMatrix LMatrix, RealLapackMatrix QMatrix>
+      requires mdspan_concepts::SameElementType<Matrix, LMatrix, QMatrix>
+    int lq(Matrix a, LMatrix l, QMatrix q) {
+      using scalar_type = typename Matrix::element_type;
+
+      const auto rows = a.extent(0);
+      const auto cols = a.extent(1);
+      const auto k = std::min(rows, cols);
+      cytnx_error_msg(l.extent(0) < rows || l.extent(1) < k,
+                      "[ERROR] LAPACK lq L output has incompatible shape.%s", "\n");
+      cytnx_error_msg(q.extent(0) < k || q.extent(1) < cols,
+                      "[ERROR] LAPACK lq Q output has incompatible shape.%s", "\n");
+
+      const blas_int native_rows = detail::to_blas_int(cols, "cols");
+      const blas_int native_cols = detail::to_blas_int(rows, "rows");
+      const blas_int native_k = detail::to_blas_int(k, "k");
+      const blas_int lda = std::max<blas_int>(1, native_rows);
+      blas_int info = 0;
+      blas_int lwork = -1;
+      std::vector<scalar_type> buffer(rows * cols);
+      for (std::size_t i = 0; i < rows; ++i) {
+        for (std::size_t j = 0; j < cols; ++j) buffer[i * cols + j] = a(i, j);
+      }
+      std::vector<scalar_type> tau(k);
+
+      // layout_right stores logical A as the column-major matrix A^T for native LAPACK.
+      // Therefore logical LQ(A) is obtained from QR(A^T): A^T = Q_t R_t, so
+      // A = R_t^T Q_t^T.
+      scalar_type work_query{};
+      native::geqrf(&native_rows, &native_cols, buffer.data(), &lda, tau.data(), &work_query,
+                    &lwork, &info);
+      if (info != 0) return info;
+      lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+      std::vector<scalar_type> work(static_cast<std::size_t>(lwork));
+      native::geqrf(&native_rows, &native_cols, buffer.data(), &lda, tau.data(), work.data(),
+                    &lwork, &info);
+      if (info != 0) return info;
+
+      for (std::size_t i = 0; i < rows; ++i) {
+        for (std::size_t j = 0; j < k; ++j) {
+          l(i, j) = i >= j ? buffer[j + i * static_cast<std::size_t>(lda)] : scalar_type{};
+        }
+      }
+
+      lwork = -1;
+      native::orgqr(&native_rows, &native_k, &native_k, buffer.data(), &lda, tau.data(),
+                    &work_query, &lwork, &info);
+      if (info != 0) return info;
+      lwork = std::max<blas_int>(1, static_cast<blas_int>(work_query));
+      work.assign(static_cast<std::size_t>(lwork), scalar_type{});
+      native::orgqr(&native_rows, &native_k, &native_k, buffer.data(), &lda, tau.data(),
+                    work.data(), &lwork, &info);
+      if (info != 0) return info;
+
+      for (std::size_t i = 0; i < k; ++i) {
+        for (std::size_t j = 0; j < cols; ++j) {
+          q(i, j) = buffer[j + i * static_cast<std::size_t>(lda)];
+        }
+      }
+
+      return info;
+    }
+
   }  // namespace lowlevel
 
   namespace detail {
@@ -812,6 +1004,24 @@ namespace cytnx::lapack {
   template <LapackMatrix Matrix>
   void inverse_inplace(Matrix a) {
     detail::check_lapack_info("getrf/getri", lowlevel::getri_inplace(a), a);
+  }
+
+  /**
+   * @brief Compute a thin QR factorization of a real row-major matrix.
+   */
+  template <RealLapackMatrix Matrix, RealLapackMatrix QMatrix, RealLapackMatrix RMatrix>
+    requires mdspan_concepts::SameElementType<Matrix, QMatrix, RMatrix>
+  void qr(Matrix a, QMatrix q, RMatrix r) {
+    detail::check_lapack_info("qr", lowlevel::qr(a, q, r), a, q, r);
+  }
+
+  /**
+   * @brief Compute a thin LQ factorization of a real row-major matrix.
+   */
+  template <RealLapackMatrix Matrix, RealLapackMatrix LMatrix, RealLapackMatrix QMatrix>
+    requires mdspan_concepts::SameElementType<Matrix, LMatrix, QMatrix>
+  void lq(Matrix a, LMatrix l, QMatrix q) {
+    detail::check_lapack_info("lq", lowlevel::lq(a, l, q), a, l, q);
   }
 
 }  // namespace cytnx::lapack
