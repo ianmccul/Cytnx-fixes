@@ -27,13 +27,44 @@ namespace cytnx {
       using type = std::tuple<T>;
     };
 
-    template <class... Alternatives>
-    struct dispatch_alternatives<std::variant<Alternatives...>> {
-      using type = std::tuple<Alternatives...>;
+    template <class T, class From>
+    struct copy_cv {
+      using from_type = std::remove_reference_t<From>;
+      using const_type = std::conditional_t<std::is_const_v<from_type>, std::add_const_t<T>, T>;
+      using type = std::conditional_t<std::is_volatile_v<from_type>,
+                                      std::add_volatile_t<const_type>, const_type>;
+    };
+
+    template <class T, class From>
+    using copy_cv_t = typename copy_cv<T, From>::type;
+
+    template <class Alternative, class VariantArg>
+    struct variant_dispatch_alternative {
+      using cv_alternative = copy_cv_t<Alternative, VariantArg>;
+      using type = std::conditional_t<std::is_lvalue_reference_v<VariantArg>, cv_alternative &,
+                                      cv_alternative>;
+    };
+
+    template <class Alternative, class VariantArg>
+    using variant_dispatch_alternative_t =
+      typename variant_dispatch_alternative<Alternative, VariantArg>::type;
+
+    template <class VariantArg, class Variant>
+    struct variant_dispatch_alternatives;
+
+    template <class VariantArg, class... Alternatives>
+    struct variant_dispatch_alternatives<VariantArg, std::variant<Alternatives...>> {
+      using type = std::tuple<variant_dispatch_alternative_t<Alternatives, VariantArg>...>;
     };
 
     template <class T>
-    using dispatch_alternatives_t = typename dispatch_alternatives<std::remove_cvref_t<T>>::type;
+      requires Variant<T>
+    struct dispatch_alternatives<T> {
+      using type = typename variant_dispatch_alternatives<T, std::remove_cvref_t<T>>::type;
+    };
+
+    template <class T>
+    using dispatch_alternatives_t = typename dispatch_alternatives<T>::type;
 
     template <class F, class Accumulated, class... AlternativeTuples>
     struct any_dispatch_invocable;
@@ -45,7 +76,7 @@ namespace cytnx {
 
     template <class F, class... Accumulated>
     struct any_dispatch_invocable<F, std::tuple<Accumulated...>> {
-      static constexpr bool value = kernel_invocable<F, Accumulated &...>;
+      static constexpr bool value = kernel_invocable<F, Accumulated...>;
     };
 
     template <class F, class... Accumulated, class... Alternatives, class... RestTuples>

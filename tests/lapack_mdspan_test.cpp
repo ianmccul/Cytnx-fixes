@@ -48,14 +48,22 @@ namespace {
   struct DispatchC {};
 
   struct DispatchKernel {};
+  struct DispatchRvalueKernel {};
 
   void run_kernel(DispatchKernel, DispatchA &, DispatchB &) {}
+  void run_kernel(DispatchRvalueKernel, DispatchA &&) {}
 
   static_assert(cytnx::Variant<std::variant<DispatchA, DispatchC>>);
   static_assert(
-    cytnx::AnyDispatchInvocable<DispatchKernel, std::variant<DispatchC, DispatchA>, DispatchB>);
-  static_assert(!cytnx::AnyDispatchInvocable<DispatchKernel, std::variant<DispatchC>, DispatchB>);
-  static_assert(cytnx::AnyDispatchInvocable<DispatchKernel, DispatchA, DispatchB>);
+    cytnx::AnyDispatchInvocable<DispatchKernel, std::variant<DispatchC, DispatchA> &, DispatchB &>);
+  static_assert(
+    !cytnx::AnyDispatchInvocable<DispatchKernel, std::variant<DispatchC> &, DispatchB &>);
+  static_assert(cytnx::AnyDispatchInvocable<DispatchKernel, DispatchA &, DispatchB &>);
+  static_assert(!cytnx::AnyDispatchInvocable<DispatchKernel, DispatchA, DispatchB>);
+  static_assert(
+    cytnx::AnyDispatchInvocable<DispatchRvalueKernel, std::variant<DispatchC, DispatchA>>);
+  static_assert(
+    !cytnx::AnyDispatchInvocable<DispatchRvalueKernel, std::variant<DispatchC, DispatchA> &>);
 
   TEST(LapackMdspanTest, RowMajorSyevComputesEigenvalues) {
     std::vector<double> a = {
