@@ -71,6 +71,13 @@ namespace cytnx {
     using reference = typename view_type::reference;
 
     static constexpr std::size_t rank() noexcept { return Rank; }
+    static constexpr bool has_static_device = std::same_as<Access, host_access>;
+
+    static constexpr int static_device()
+      requires has_static_device
+    {
+      return tensor_t_detail::access_device(host_access{});
+    }
 
     TensorT() = default;
     TensorT(owner_type owner, view_type view, Access access = Access{})
@@ -107,7 +114,13 @@ namespace cytnx {
     const Access &access() const noexcept { return access_; }
 
     static constexpr unsigned int dtype() { return Type_class::cy_typeid_v<std::remove_cv_t<T>>; }
-    int device() const { return tensor_t_detail::access_device(access_); }
+    int device() const {
+      if constexpr (has_static_device) {
+        return static_device();
+      } else {
+        return tensor_t_detail::access_device(access_);
+      }
+    }
     T &value() const noexcept requires(Rank == 0) { return view_(); }
 
     template <class... Indices>

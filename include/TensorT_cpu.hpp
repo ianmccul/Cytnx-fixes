@@ -30,7 +30,7 @@ namespace cytnx {
       return {};
     }
 
-    inline int access_device(host_access) { return Device.cpu; }
+    constexpr int access_device(host_access) { return Device.cpu; }
 
     inline bool access_accepts_device(host_access, int device) { return device == Device.cpu; }
 
