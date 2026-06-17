@@ -64,7 +64,7 @@ namespace cytnx {
     };
 
     template <class T>
-      requires Variant<T>
+    requires Variant<T>
     struct dispatch_alternatives<T> {
       using type = typename variant_dispatch_alternatives<T, std::remove_cvref_t<T>>::type;
     };
@@ -86,19 +86,16 @@ namespace cytnx {
     }
 
     template <class Kernel>
-    concept has_kernel_name = requires { std::remove_cvref_t<Kernel>::name; };
+    concept has_kernel_name = requires {
+      std::remove_cvref_t<Kernel>::name;
+    };
 
     template <class Kernel>
-      requires has_kernel_name<Kernel>
-    constexpr std::string_view kernel_name() {
-      return std::remove_cvref_t<Kernel>::name;
-    }
+    requires has_kernel_name<Kernel>
+    constexpr std::string_view kernel_name() { return std::remove_cvref_t<Kernel>::name; }
 
     template <class Kernel>
-      requires(!has_kernel_name<Kernel>)
-    std::string kernel_name() {
-      return type_name<Kernel>();
-    }
+    requires(!has_kernel_name<Kernel>) std::string kernel_name() { return type_name<Kernel>(); }
 
     template <class T>
     concept has_device = requires(const T &value) {
@@ -108,7 +105,7 @@ namespace cytnx {
     template <class T>
     concept tensor_metadata_like = requires(const T &value) {
       { value.rank() } -> std::convertible_to<std::size_t>;
-      { value.shape() };
+      {value.shape()};
       { value.dtype_str() } -> std::convertible_to<std::string>;
       { value.device_str() } -> std::convertible_to<std::string>;
       { value.is_contiguous() } -> std::convertible_to<bool>;
@@ -297,7 +294,7 @@ namespace cytnx {
    * reported.
    */
   template <class Kernel, class... Args>
-    requires AnyDispatchInvocable<Kernel, Args...>
+  requires AnyDispatchInvocable<Kernel, Args...>
   decltype(auto) invoke_kernel(Kernel &&kernel, Args &&...args) {
     return kernel_detail::dispatch_visit(
       [&kernel](auto &&...active) -> decltype(auto) {

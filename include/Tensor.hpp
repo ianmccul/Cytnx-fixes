@@ -580,7 +580,7 @@ namespace cytnx {
       return as_mdspan<T, Rank, host_access>();
     }
 
-  #ifdef UNI_GPU
+#ifdef UNI_GPU
     /**
      * @brief Return a non-owning CUDA mdspan view of the Tensor storage.
      */
@@ -588,7 +588,7 @@ namespace cytnx {
     auto as_device_mdspan() const {
       return as_mdspan<T, Rank, cuda_access>();
     }
-  #endif
+#endif
 
     /**
      * @brief Return a non-owning typed layout-right mdspan view of this Tensor.
@@ -632,7 +632,7 @@ namespace cytnx {
       return as_right_mdspan<T, Rank, host_access>();
     }
 
-  #ifdef UNI_GPU
+#ifdef UNI_GPU
     /**
      * @brief Return a non-owning CUDA layout-right mdspan view of this Tensor.
      */
@@ -640,9 +640,9 @@ namespace cytnx {
     auto as_device_right_mdspan() {
       return as_right_mdspan<T, Rank, cuda_access>();
     }
-  #endif
+#endif
 
-  #ifdef UNI_GPU
+#ifdef UNI_GPU
     // std::variant of pointers to Type_list_gpu, without void ....
     using gpu_pointer_types =
       make_variant_from_transform_t<typename internal::exclude_first<Type_list_gpu>::type,

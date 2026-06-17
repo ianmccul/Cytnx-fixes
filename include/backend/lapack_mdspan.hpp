@@ -200,20 +200,19 @@ namespace cytnx::lapack {
   }  // namespace detail
 
   template <class T>
-  concept RealLapackScalar =
-    std::is_same_v<std::remove_cv_t<T>, float> || std::is_same_v<std::remove_cv_t<T>, double>;
+  concept RealLapackScalar = std::is_same_v < std::remove_cv_t<T>,
+  float > || std::is_same_v<std::remove_cv_t<T>, double>;
 
   template <class T>
   concept ComplexLapackScalar = std::is_same_v<std::remove_cv_t<T>, std::complex<float>> ||
-                                std::is_same_v<std::remove_cv_t<T>, std::complex<double>>;
+    std::is_same_v<std::remove_cv_t<T>, std::complex<double>>;
 
   template <class T>
   concept LapackScalar = RealLapackScalar<T> || ComplexLapackScalar<T>;
 
   template <class View>
-  concept LapackVector =
-    mdspan_concepts::LayoutRightVector<View> && mdspan_concepts::HostAccessible<View> &&
-    LapackScalar<typename View::element_type>;
+  concept LapackVector = mdspan_concepts::LayoutRightVector<View> &&
+    mdspan_concepts::HostAccessible<View> && LapackScalar<typename View::element_type>;
 
   template <class View>
   concept RealLapackVector = LapackVector<View> && RealLapackScalar<typename View::element_type>;
@@ -233,8 +232,7 @@ namespace cytnx::lapack {
     ComplexLapackVector<View> && mdspan_concepts::MutableView<View>;
 
   template <class Matrix, class Vector>
-  concept LapackEigenvalueVector =
-    ComplexLapackVector<Vector> &&
+  concept LapackEigenvalueVector = ComplexLapackVector<Vector> &&
     ((RealLapackScalar<typename Matrix::element_type> &&
       std::same_as<mdspan_concepts::element_value_t<Vector>,
                    std::complex<mdspan_concepts::element_value_t<Matrix>>>) ||
@@ -243,9 +241,8 @@ namespace cytnx::lapack {
                    mdspan_concepts::element_value_t<Vector>>));
 
   template <class View>
-  concept LapackMatrix =
-    mdspan_concepts::LayoutRightMatrix<View> && mdspan_concepts::HostAccessible<View> &&
-    LapackScalar<typename View::element_type>;
+  concept LapackMatrix = mdspan_concepts::LayoutRightMatrix<View> &&
+    mdspan_concepts::HostAccessible<View> && LapackScalar<typename View::element_type>;
 
   template <class View>
   concept RealLapackMatrix = LapackMatrix<View> && RealLapackScalar<typename View::element_type>;
@@ -265,8 +262,7 @@ namespace cytnx::lapack {
     ComplexLapackMatrix<View> && mdspan_concepts::MutableView<View>;
 
   template <class Matrix, class Eigenvectors>
-  concept LapackEigenvectorMatrix =
-    MutableComplexLapackMatrix<Eigenvectors> &&
+  concept LapackEigenvectorMatrix = MutableComplexLapackMatrix<Eigenvectors> &&
     ((RealLapackScalar<typename Matrix::element_type> &&
       std::same_as<mdspan_concepts::element_value_t<Eigenvectors>,
                    std::complex<mdspan_concepts::element_value_t<Matrix>>>) ||
@@ -575,7 +571,7 @@ namespace cytnx::lapack {
     }  // namespace native
 
     template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector>
-      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
     int gesvd(Matrix a, Vector s) {
       using scalar_type = mdspan_concepts::element_value_t<Matrix>;
       using real_type = mdspan_concepts::real_element_t<scalar_type>;
@@ -620,8 +616,8 @@ namespace cytnx::lapack {
 
     template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector,
               MutableLapackMatrix LeftSingularVectors, MutableLapackMatrix RightSingularVectors>
-      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
-               mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+      mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
     int gesvd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
       using scalar_type = mdspan_concepts::element_value_t<Matrix>;
       using real_type = mdspan_concepts::real_element_t<scalar_type>;
@@ -674,7 +670,7 @@ namespace cytnx::lapack {
     }
 
     template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector>
-      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
     int gesdd(Matrix a, Vector s) {
       using scalar_type = mdspan_concepts::element_value_t<Matrix>;
       using real_type = mdspan_concepts::real_element_t<scalar_type>;
@@ -719,8 +715,8 @@ namespace cytnx::lapack {
 
     template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector,
               MutableLapackMatrix LeftSingularVectors, MutableLapackMatrix RightSingularVectors>
-      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
-               mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+      mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
     int gesdd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
       using scalar_type = mdspan_concepts::element_value_t<Matrix>;
       using real_type = mdspan_concepts::real_element_t<scalar_type>;
@@ -777,8 +773,8 @@ namespace cytnx::lapack {
 
     template <LapackMatrix Matrix, MutableLapackMatrix RightHandSide,
               MutableRealLapackVector Vector>
-      requires mdspan_concepts::SameElementType<Matrix, RightHandSide> &&
-               mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+    requires mdspan_concepts::SameElementType<Matrix, RightHandSide> &&
+      mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
     int gelsd(Matrix a, RightHandSide b, Vector s, blas_int &rank,
               mdspan_concepts::real_element_t<mdspan_concepts::element_value_t<Matrix>> rcond) {
       using scalar_type = mdspan_concepts::element_value_t<Matrix>;
@@ -858,7 +854,7 @@ namespace cytnx::lapack {
     }
 
     template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector>
-      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
     int eigh(char jobz, char uplo, Matrix a, Vector w) {
       using scalar_type = mdspan_concepts::element_value_t<Matrix>;
       using real_type = mdspan_concepts::real_element_t<scalar_type>;
@@ -900,7 +896,7 @@ namespace cytnx::lapack {
     }
 
     template <MutableLapackMatrix Matrix, MutableComplexLapackVector Vector>
-      requires LapackEigenvalueVector<Matrix, Vector>
+    requires LapackEigenvalueVector<Matrix, Vector>
     int geev_values(Matrix a, Vector w) {
       using scalar_type = mdspan_concepts::element_value_t<Matrix>;
       using real_type = mdspan_concepts::real_element_t<scalar_type>;
@@ -949,8 +945,8 @@ namespace cytnx::lapack {
 
     template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector,
               MutableLapackMatrix Eigenvectors>
-      requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
-               mdspan_concepts::SameElementType<Matrix, Eigenvectors>
+    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+      mdspan_concepts::SameElementType<Matrix, Eigenvectors>
     int eigh_vectors(char uplo, Matrix a, Vector w, Eigenvectors vectors) {
       const auto n = a.extent(0);
       cytnx_error_msg(vectors.extent(0) < n || vectors.extent(1) < n,
@@ -969,8 +965,7 @@ namespace cytnx::lapack {
 
     template <LapackMatrix Matrix, MutableComplexLapackVector Vector,
               MutableComplexLapackMatrix Eigenvectors>
-      requires LapackEigenvalueVector<Matrix, Vector> &&
-               LapackEigenvectorMatrix<Matrix, Eigenvectors>
+    requires LapackEigenvalueVector<Matrix, Vector> && LapackEigenvectorMatrix<Matrix, Eigenvectors>
     int geev_right_vectors(Matrix a, Vector w, Eigenvectors vectors) {
       using complex_type = mdspan_concepts::element_value_t<Vector>;
       using real_type = mdspan_concepts::real_element_t<complex_type>;
@@ -1012,7 +1007,7 @@ namespace cytnx::lapack {
     }
 
     template <MutableRealLapackVector Diagonal, MutableRealLapackVector OffDiagonal>
-      requires mdspan_concepts::SameElementType<Diagonal, OffDiagonal>
+    requires mdspan_concepts::SameElementType<Diagonal, OffDiagonal>
     int stev_values(Diagonal diagonal, OffDiagonal offdiagonal) {
       using scalar_type = mdspan_concepts::element_value_t<Diagonal>;
 
@@ -1062,7 +1057,7 @@ namespace cytnx::lapack {
     }
 
     template <LapackMatrix Matrix, MutableLapackMatrix QMatrix, MutableLapackMatrix RMatrix>
-      requires mdspan_concepts::SameElementType<Matrix, QMatrix, RMatrix>
+    requires mdspan_concepts::SameElementType<Matrix, QMatrix, RMatrix>
     int qr(Matrix a, QMatrix q, RMatrix r) {
       using scalar_type = mdspan_concepts::element_value_t<Matrix>;
 
@@ -1125,7 +1120,7 @@ namespace cytnx::lapack {
     }
 
     template <LapackMatrix Matrix, MutableLapackMatrix LMatrix, MutableLapackMatrix QMatrix>
-      requires mdspan_concepts::SameElementType<Matrix, LMatrix, QMatrix>
+    requires mdspan_concepts::SameElementType<Matrix, LMatrix, QMatrix>
     int lq(Matrix a, LMatrix l, QMatrix q) {
       using scalar_type = mdspan_concepts::element_value_t<Matrix>;
 
@@ -1236,7 +1231,7 @@ namespace cytnx::lapack {
    * @brief Compute singular values with checked host LAPACK diagnostics.
    */
   template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector>
-    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+  requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void svd_values(Matrix a, Vector s) {
     detail::check_lapack_info("gesvd", lowlevel::gesvd(a, s), a, s);
   }
@@ -1246,8 +1241,8 @@ namespace cytnx::lapack {
    */
   template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector,
             MutableLapackMatrix LeftSingularVectors, MutableLapackMatrix RightSingularVectors>
-    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
-             mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
+  requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+    mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
   void svd(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
     detail::check_lapack_info("gesvd", lowlevel::gesvd(a, s, u, vt), a, s, u, vt);
   }
@@ -1256,7 +1251,7 @@ namespace cytnx::lapack {
    * @brief Compute singular values with the divide-and-conquer SVD driver.
    */
   template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector>
-    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+  requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void svd_divide_conquer_values(Matrix a, Vector s) {
     detail::check_lapack_info("gesdd", lowlevel::gesdd(a, s), a, s);
   }
@@ -1266,8 +1261,8 @@ namespace cytnx::lapack {
    */
   template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector,
             MutableLapackMatrix LeftSingularVectors, MutableLapackMatrix RightSingularVectors>
-    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
-             mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
+  requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+    mdspan_concepts::SameElementType<Matrix, LeftSingularVectors, RightSingularVectors>
   void svd_divide_conquer(Matrix a, Vector s, LeftSingularVectors u, RightSingularVectors vt) {
     detail::check_lapack_info("gesdd", lowlevel::gesdd(a, s, u, vt), a, s, u, vt);
   }
@@ -1280,10 +1275,10 @@ namespace cytnx::lapack {
    */
   template <LapackMatrix Matrix, MutableLapackMatrix RightHandSide, MutableRealLapackVector Vector,
             class Rcond>
-    requires mdspan_concepts::SameElementType<Matrix, RightHandSide> &&
-             mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
-             std::convertible_to<
-               Rcond, mdspan_concepts::real_element_t<mdspan_concepts::element_value_t<Matrix>>>
+  requires mdspan_concepts::SameElementType<Matrix, RightHandSide> &&
+    mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+    std::convertible_to<Rcond,
+                        mdspan_concepts::real_element_t<mdspan_concepts::element_value_t<Matrix>>>
   void least_squares(Matrix a, RightHandSide b, Vector s, blas_int &rank, Rcond rcond) {
     using real_type = mdspan_concepts::real_element_t<mdspan_concepts::element_value_t<Matrix>>;
     detail::check_lapack_info(
@@ -1295,7 +1290,7 @@ namespace cytnx::lapack {
    * diagnostics.
    */
   template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector>
-    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
+  requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>>
   void self_adjoint_eigh(char jobz, char uplo, Matrix a, Vector w) {
     detail::check_lapack_info("eigh", lowlevel::eigh(jobz, uplo, a, w), a, w);
   }
@@ -1305,8 +1300,8 @@ namespace cytnx::lapack {
    */
   template <MutableLapackMatrix Matrix, MutableRealLapackVector Vector,
             MutableLapackMatrix Eigenvectors>
-    requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
-             mdspan_concepts::SameElementType<Matrix, Eigenvectors>
+  requires mdspan_concepts::SameElementType<Vector, mdspan_concepts::RealElementOf<Matrix>> &&
+    mdspan_concepts::SameElementType<Matrix, Eigenvectors>
   void self_adjoint_eigh_vectors(char uplo, Matrix a, Vector w, Eigenvectors vectors) {
     detail::check_lapack_info("eigh", lowlevel::eigh_vectors(uplo, a, w, vectors), a, w, vectors);
   }
@@ -1315,7 +1310,7 @@ namespace cytnx::lapack {
    * @brief Compute eigenvalues of a general square matrix with checked host LAPACK diagnostics.
    */
   template <MutableLapackMatrix Matrix, MutableComplexLapackVector Vector>
-    requires LapackEigenvalueVector<Matrix, Vector>
+  requires LapackEigenvalueVector<Matrix, Vector>
   void eig_values(Matrix a, Vector w) {
     detail::check_lapack_info("geev", lowlevel::geev_values(a, w), a, w);
   }
@@ -1327,7 +1322,7 @@ namespace cytnx::lapack {
    */
   template <LapackMatrix Matrix, MutableComplexLapackVector Vector,
             MutableComplexLapackMatrix Eigenvectors>
-    requires LapackEigenvalueVector<Matrix, Vector> && LapackEigenvectorMatrix<Matrix, Eigenvectors>
+  requires LapackEigenvalueVector<Matrix, Vector> && LapackEigenvectorMatrix<Matrix, Eigenvectors>
   void eig_right_vectors(Matrix a, Vector w, Eigenvectors vectors) {
     detail::check_lapack_info("geev", lowlevel::geev_right_vectors(a, w, vectors), a, w, vectors);
   }
@@ -1339,7 +1334,7 @@ namespace cytnx::lapack {
    * workspace and is not preserved.
    */
   template <MutableRealLapackVector Diagonal, MutableRealLapackVector OffDiagonal>
-    requires mdspan_concepts::SameElementType<Diagonal, OffDiagonal>
+  requires mdspan_concepts::SameElementType<Diagonal, OffDiagonal>
   void symmetric_tridiagonal_eigh_values(Diagonal diagonal, OffDiagonal offdiagonal) {
     detail::check_lapack_info("stev", lowlevel::stev_values(diagonal, offdiagonal), diagonal,
                               offdiagonal);
@@ -1361,7 +1356,7 @@ namespace cytnx::lapack {
    * @brief Compute a thin QR factorization of a row-major matrix.
    */
   template <LapackMatrix Matrix, MutableLapackMatrix QMatrix, MutableLapackMatrix RMatrix>
-    requires mdspan_concepts::SameElementType<Matrix, QMatrix, RMatrix>
+  requires mdspan_concepts::SameElementType<Matrix, QMatrix, RMatrix>
   void qr(Matrix a, QMatrix q, RMatrix r) {
     detail::check_lapack_info("qr", lowlevel::qr(a, q, r), a, q, r);
   }
@@ -1370,7 +1365,7 @@ namespace cytnx::lapack {
    * @brief Compute a thin LQ factorization of a row-major matrix.
    */
   template <LapackMatrix Matrix, MutableLapackMatrix LMatrix, MutableLapackMatrix QMatrix>
-    requires mdspan_concepts::SameElementType<Matrix, LMatrix, QMatrix>
+  requires mdspan_concepts::SameElementType<Matrix, LMatrix, QMatrix>
   void lq(Matrix a, LMatrix l, QMatrix q) {
     detail::check_lapack_info("lq", lowlevel::lq(a, l, q), a, l, q);
   }

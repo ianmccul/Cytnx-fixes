@@ -73,9 +73,7 @@ namespace cytnx {
     static constexpr std::size_t rank() noexcept { return Rank; }
     static constexpr bool has_static_device = std::same_as<Access, host_access>;
 
-    static constexpr int static_device()
-      requires has_static_device
-    {
+    static constexpr int static_device() requires has_static_device {
       return tensor_t_detail::access_device(host_access{});
     }
 

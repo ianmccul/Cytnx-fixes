@@ -71,7 +71,8 @@ namespace cytnx::mdspan_concepts {
   concept MutableView = MdspanView<View> && !std::is_const_v<typename View::element_type>;
 
   template <class View, std::size_t Rank>
-  concept RankOf = MdspanView<View> && View::rank() == Rank;
+  concept RankOf = MdspanView<View> && View::rank()
+  == Rank;
 
   template <class View>
   concept Vector = RankOf<View, 1>;

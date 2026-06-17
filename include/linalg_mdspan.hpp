@@ -24,7 +24,7 @@ namespace cytnx {
    * over alternatives and report an error if the active alternatives are incompatible.
    */
   template <class MatrixArg, class VectorArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::svd_values_kernel, MatrixArg, VectorArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::svd_values_kernel, MatrixArg, VectorArg>
   void svd_values(MatrixArg &&a, VectorArg &&s) {
     invoke_kernel(linalg_mdspan_backend::svd_values_kernel{}, std::forward<MatrixArg>(a),
                   std::forward<VectorArg>(s));
@@ -39,8 +39,8 @@ namespace cytnx {
    */
   template <class MatrixArg, class VectorArg, class LeftSingularVectorsArg,
             class RightSingularVectorsArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::svd_kernel, MatrixArg, VectorArg,
-                                  LeftSingularVectorsArg, RightSingularVectorsArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::svd_kernel, MatrixArg, VectorArg,
+                                LeftSingularVectorsArg, RightSingularVectorsArg>
   void svd(MatrixArg &&a, VectorArg &&s, LeftSingularVectorsArg &&u, RightSingularVectorsArg &&vt) {
     invoke_kernel(linalg_mdspan_backend::svd_kernel{}, std::forward<MatrixArg>(a),
                   std::forward<VectorArg>(s), std::forward<LeftSingularVectorsArg>(u),
@@ -54,8 +54,8 @@ namespace cytnx {
    * over alternatives and report an error if the active alternatives are incompatible.
    */
   template <class MatrixArg, class VectorArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::svd_divide_conquer_values_kernel,
-                                  MatrixArg, VectorArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::svd_divide_conquer_values_kernel, MatrixArg,
+                                VectorArg>
   void svd_divide_conquer_values(MatrixArg &&a, VectorArg &&s) {
     invoke_kernel(linalg_mdspan_backend::svd_divide_conquer_values_kernel{},
                   std::forward<MatrixArg>(a), std::forward<VectorArg>(s));
@@ -70,8 +70,8 @@ namespace cytnx {
    */
   template <class MatrixArg, class VectorArg, class LeftSingularVectorsArg,
             class RightSingularVectorsArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::svd_divide_conquer_kernel, MatrixArg,
-                                  VectorArg, LeftSingularVectorsArg, RightSingularVectorsArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::svd_divide_conquer_kernel, MatrixArg,
+                                VectorArg, LeftSingularVectorsArg, RightSingularVectorsArg>
   void svd_divide_conquer(MatrixArg &&a, VectorArg &&s, LeftSingularVectorsArg &&u,
                           RightSingularVectorsArg &&vt) {
     invoke_kernel(linalg_mdspan_backend::svd_divide_conquer_kernel{}, std::forward<MatrixArg>(a),
@@ -87,8 +87,8 @@ namespace cytnx {
    * `rank` receives the effective numerical rank.
    */
   template <class MatrixArg, class RightHandSideArg, class SingularValuesArg, class Rcond>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::least_squares_kernel, MatrixArg,
-                                  RightHandSideArg, SingularValuesArg, blas_int &, Rcond>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::least_squares_kernel, MatrixArg,
+                                RightHandSideArg, SingularValuesArg, blas_int &, Rcond>
   void least_squares(MatrixArg &&a, RightHandSideArg &&b, SingularValuesArg &&s, blas_int &rank,
                      Rcond rcond) {
     invoke_kernel(linalg_mdspan_backend::least_squares_kernel{}, std::forward<MatrixArg>(a),
@@ -100,8 +100,8 @@ namespace cytnx {
    * @brief Solve a least-squares problem using LAPACK's default rank cutoff.
    */
   template <class MatrixArg, class RightHandSideArg, class SingularValuesArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::least_squares_kernel, MatrixArg,
-                                  RightHandSideArg, SingularValuesArg, blas_int &, double>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::least_squares_kernel, MatrixArg,
+                                RightHandSideArg, SingularValuesArg, blas_int &, double>
   void least_squares(MatrixArg &&a, RightHandSideArg &&b, SingularValuesArg &&s, blas_int &rank) {
     least_squares(std::forward<MatrixArg>(a), std::forward<RightHandSideArg>(b),
                   std::forward<SingularValuesArg>(s), rank, -1.0);
@@ -115,8 +115,8 @@ namespace cytnx {
    * error if the active alternatives are incompatible.
    */
   template <class MatrixArg, class VectorArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::self_adjoint_eigh_kernel, MatrixArg,
-                                  VectorArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::self_adjoint_eigh_kernel, MatrixArg,
+                                VectorArg>
   void self_adjoint_eigh(char jobz, char uplo, MatrixArg &&a, VectorArg &&w) {
     invoke_kernel(linalg_mdspan_backend::self_adjoint_eigh_kernel{jobz, uplo},
                   std::forward<MatrixArg>(a), std::forward<VectorArg>(w));
@@ -129,8 +129,8 @@ namespace cytnx {
    * eigenvector contiguous in memory.
    */
   template <class MatrixArg, class VectorArg, class EigenvectorsArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::self_adjoint_eigh_vectors_kernel,
-                                  MatrixArg, VectorArg, EigenvectorsArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::self_adjoint_eigh_vectors_kernel, MatrixArg,
+                                VectorArg, EigenvectorsArg>
   void self_adjoint_eigh_vectors(char uplo, MatrixArg &&a, VectorArg &&w,
                                  EigenvectorsArg &&vectors) {
     invoke_kernel(linalg_mdspan_backend::self_adjoint_eigh_vectors_kernel{uplo},
@@ -146,7 +146,7 @@ namespace cytnx {
    * incompatible.
    */
   template <class MatrixArg, class VectorArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::eig_values_kernel, MatrixArg, VectorArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::eig_values_kernel, MatrixArg, VectorArg>
   void eig_values(MatrixArg &&a, VectorArg &&w) {
     invoke_kernel(linalg_mdspan_backend::eig_values_kernel{}, std::forward<MatrixArg>(a),
                   std::forward<VectorArg>(w));
@@ -159,8 +159,8 @@ namespace cytnx {
    * `vectors(i, j)` is component `j` of eigenvector `i`.
    */
   template <class MatrixArg, class VectorArg, class EigenvectorsArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::eig_right_vectors_kernel, MatrixArg,
-                                  VectorArg, EigenvectorsArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::eig_right_vectors_kernel, MatrixArg,
+                                VectorArg, EigenvectorsArg>
   void eig_right_vectors(MatrixArg &&a, VectorArg &&w, EigenvectorsArg &&vectors) {
     invoke_kernel(linalg_mdspan_backend::eig_right_vectors_kernel{}, std::forward<MatrixArg>(a),
                   std::forward<VectorArg>(w), std::forward<EigenvectorsArg>(vectors));
@@ -174,8 +174,8 @@ namespace cytnx {
    * alternatives are incompatible.
    */
   template <class DiagonalArg, class OffDiagonalArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::symmetric_tridiagonal_eigh_values_kernel,
-                                  DiagonalArg, OffDiagonalArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::symmetric_tridiagonal_eigh_values_kernel,
+                                DiagonalArg, OffDiagonalArg>
   void symmetric_tridiagonal_eigh_values(DiagonalArg &&diagonal, OffDiagonalArg &&offdiagonal) {
     invoke_kernel(linalg_mdspan_backend::symmetric_tridiagonal_eigh_values_kernel{},
                   std::forward<DiagonalArg>(diagonal), std::forward<OffDiagonalArg>(offdiagonal));
@@ -188,7 +188,7 @@ namespace cytnx {
    * incompatible.
    */
   template <class MatrixArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::inverse_inplace_kernel, MatrixArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::inverse_inplace_kernel, MatrixArg>
   void inverse_inplace(MatrixArg &&a) {
     invoke_kernel(linalg_mdspan_backend::inverse_inplace_kernel{}, std::forward<MatrixArg>(a));
   }
@@ -200,7 +200,7 @@ namespace cytnx {
    * incompatible.
    */
   template <class MatrixArg, class QArg, class RArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::qr_kernel, MatrixArg, QArg, RArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::qr_kernel, MatrixArg, QArg, RArg>
   void qr(MatrixArg &&a, QArg &&q, RArg &&r) {
     invoke_kernel(linalg_mdspan_backend::qr_kernel{}, std::forward<MatrixArg>(a),
                   std::forward<QArg>(q), std::forward<RArg>(r));
@@ -213,7 +213,7 @@ namespace cytnx {
    * incompatible.
    */
   template <class MatrixArg, class LArg, class QArg>
-    requires AnyDispatchInvocable<linalg_mdspan_backend::lq_kernel, MatrixArg, LArg, QArg>
+  requires AnyDispatchInvocable<linalg_mdspan_backend::lq_kernel, MatrixArg, LArg, QArg>
   void lq(MatrixArg &&a, LArg &&l, QArg &&q) {
     invoke_kernel(linalg_mdspan_backend::lq_kernel{}, std::forward<MatrixArg>(a),
                   std::forward<LArg>(l), std::forward<QArg>(q));
