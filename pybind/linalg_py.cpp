@@ -196,8 +196,6 @@ void linalg_binding(py::module &m) {
 
   m_linalg.def("Exp", &cytnx::linalg::Exp, py::arg("Tin"));
   m_linalg.def("Exp_", &cytnx::linalg::Exp_, py::arg("Tio"));
-  m_linalg.def("Expf_", &cytnx::linalg::Expf_, py::arg("Tio"));
-  m_linalg.def("Expf", &cytnx::linalg::Expf, py::arg("Tio"));
 
   // UT, [Note] no bool type!
   m_linalg.def(

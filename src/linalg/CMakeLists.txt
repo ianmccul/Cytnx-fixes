@@ -31,8 +31,6 @@ target_sources(cytnx
     Exp.cpp
     ExpM.cpp
     Exp_.cpp
-    Expf.cpp
-    Expf_.cpp
     ExpH.cpp
     ExpM.cpp
     InvM.cpp
