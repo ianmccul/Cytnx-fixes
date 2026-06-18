@@ -31,3 +31,46 @@ TEST(ExpM, ExpM_test) {
                 1e-5);
   }
 }
+
+TEST(ExpM, NilpotentJordanBlock) {
+  Tensor t_i = zeros({2, 2}, Type.Double);
+  t_i.at<double>({0, 1}) = 1.0;
+
+  Tensor t_f = linalg::ExpM(t_i, 1.0);
+
+  EXPECT_EQ(t_f.dtype(), Type.Double);
+  EXPECT_NEAR(t_f.at<double>({0, 0}), 1.0, 1e-12);
+  EXPECT_NEAR(t_f.at<double>({0, 1}), 1.0, 1e-12);
+  EXPECT_NEAR(t_f.at<double>({1, 0}), 0.0, 1e-12);
+  EXPECT_NEAR(t_f.at<double>({1, 1}), 1.0, 1e-12);
+}
+
+TEST(ExpM, PreservesFloatForRealInput) {
+  Tensor t_i = zeros({2, 2}, Type.Float);
+  t_i.at<float>({0, 1}) = 1.0f;
+
+  Tensor t_f = linalg::ExpM(t_i, 1.0);
+
+  EXPECT_EQ(t_f.dtype(), Type.Float);
+  EXPECT_NEAR(t_f.at<float>({0, 0}), 1.0f, 1e-6);
+  EXPECT_NEAR(t_f.at<float>({0, 1}), 1.0f, 1e-6);
+  EXPECT_NEAR(t_f.at<float>({1, 0}), 0.0f, 1e-6);
+  EXPECT_NEAR(t_f.at<float>({1, 1}), 1.0f, 1e-6);
+}
+
+TEST(ExpM, PreservesComplexFloatForComplexInput) {
+  Tensor t_i = zeros({2, 2}, Type.ComplexFloat);
+  t_i.at<cytnx_complex64>({0, 1}) = cytnx_complex64(1.0f, 0.0f);
+
+  Tensor t_f = linalg::ExpM(t_i, cytnx_complex64(0.0f, 1.0f));
+
+  EXPECT_EQ(t_f.dtype(), Type.ComplexFloat);
+  EXPECT_NEAR(t_f.at<cytnx_complex64>({0, 0}).real(), 1.0f, 1e-6);
+  EXPECT_NEAR(t_f.at<cytnx_complex64>({0, 0}).imag(), 0.0f, 1e-6);
+  EXPECT_NEAR(t_f.at<cytnx_complex64>({0, 1}).real(), 0.0f, 1e-6);
+  EXPECT_NEAR(t_f.at<cytnx_complex64>({0, 1}).imag(), 1.0f, 1e-6);
+  EXPECT_NEAR(t_f.at<cytnx_complex64>({1, 0}).real(), 0.0f, 1e-6);
+  EXPECT_NEAR(t_f.at<cytnx_complex64>({1, 0}).imag(), 0.0f, 1e-6);
+  EXPECT_NEAR(t_f.at<cytnx_complex64>({1, 1}).real(), 1.0f, 1e-6);
+  EXPECT_NEAR(t_f.at<cytnx_complex64>({1, 1}).imag(), 0.0f, 1e-6);
+}
