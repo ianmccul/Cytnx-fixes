@@ -2238,10 +2238,11 @@ namespace cytnx {
     \f[
         T_{o}[i] = e^{T_{i}[i]}
     \f]
-    Note that it will cast to Double type or ComplexDouble type.
+    Note that it preserves Float, Double, ComplexFloat, and ComplexDouble input precision.
+    Integer and Bool input tensors are cast to Double type.
     @param[in] Tin a Tensor
     @return
-        [Double Tensor] or [ComplexDouble Tensor]
+        [Float Tensor], [Double Tensor], [ComplexFloat Tensor], or [ComplexDouble Tensor]
 
     */
     Tensor Exp(const Tensor &Tin);
