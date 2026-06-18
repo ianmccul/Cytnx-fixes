@@ -63,6 +63,26 @@ PYBIND11_MODULE(cytnx, m) {
   for (std::size_t i = 0; i < N_Type; ++i) {
     type_enum.value(Type.enum_name(i), static_cast<Type_class::Type>(i));
   }
+  type_enum
+    .def_static("is_complex",
+                [](const unsigned int &type_id) { return cytnx::Type.is_complex(type_id); })
+    .def_static("is_float",
+                [](const unsigned int &type_id) { return cytnx::Type.is_float(type_id); })
+    .def_static("is_int", [](const unsigned int &type_id) { return cytnx::Type.is_int(type_id); })
+    .def_static("is_unsigned",
+                [](const unsigned int &type_id) { return cytnx::Type.is_unsigned(type_id); })
+    .def_static("type_promote",
+                [](const unsigned int &typeL, const unsigned int &typeR) {
+                  return static_cast<Type_class::Type>(cytnx::Type.type_promote(typeL, typeR));
+                })
+    .def_static("typeSize",
+                [](const unsigned int &type_id) { return cytnx::Type.typeSize(type_id); })
+    .def_static(
+      "getname",
+      [](const unsigned int &type_id) { return std::string(cytnx::Type.getname(type_id)); })
+    .def_static("enum_name", [](const unsigned int &type_id) {
+      return std::string(cytnx::Type.enum_name(type_id));
+    });
   type_enum.export_values();
 
   auto mdev = m.def_submodule("Device");
