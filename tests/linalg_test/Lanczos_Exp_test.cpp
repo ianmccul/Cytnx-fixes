@@ -87,10 +87,6 @@ namespace Lanczos_Exp_Ut_Test {
 
   double FloatLanczosExpTolerance() { return 100.0 * std::numeric_limits<float>::epsilon(); }
 
-  bool IsSinglePrecisionDType(const unsigned int dtype) {
-    return dtype == Type.Float || dtype == Type.ComplexFloat;
-  }
-
   UniTensor SmallResidualInitialState(const unsigned int dtype) {
     UniTensor Tin = UniTensor::zeros({3, 1}, {}, dtype, Device.cpu).set_rowrank_(1);
     Tin.at({0, 0}) = 1.0;
@@ -136,6 +132,7 @@ namespace Lanczos_Exp_Ut_Test {
     auto x = linalg::Lanczos_Exp(&op, Tin, tau, crit);
     auto ans = GetAns(op.EffH, Tin, tau);
     auto err = static_cast<double>((x - ans).Norm().item().real());
+    EXPECT_EQ(x.dtype(), Type.Double);
     EXPECT_LE(err, crit);
   }
 
@@ -234,9 +231,7 @@ namespace Lanczos_Exp_Ut_Test {
     auto ans = SmallResidualExpectedState(coupling, tau, x.dtype());
     auto err = static_cast<double>((x - ans).Norm().item().real());
 
-    // ExpM currently returns a complex matrix even for this real case. Either
-    // real or complex output is acceptable here, but it must remain single precision.
-    EXPECT_TRUE(IsSinglePrecisionDType(x.dtype()));
+    EXPECT_EQ(x.dtype(), Type.Float);
     EXPECT_LE(err, FloatLanczosExpTolerance());
   }
 
@@ -251,9 +246,7 @@ namespace Lanczos_Exp_Ut_Test {
     auto ans = SmallResidualExpectedState(coupling, tau, x.dtype());
     auto err = static_cast<double>((x - ans).Norm().item().real());
 
-    // ExpM currently returns a complex matrix even for this real case. Either
-    // real or complex output is acceptable here, but it must remain single precision.
-    EXPECT_TRUE(IsSinglePrecisionDType(x.dtype()));
+    EXPECT_EQ(x.dtype(), Type.Float);
     EXPECT_LE(err, FloatLanczosExpTolerance());
   }
 

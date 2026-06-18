@@ -88,6 +88,15 @@ namespace cytnx {
 
       double scalar_abs_internal(const Scalar &s) { return static_cast<double>(s.abs()); }
 
+      Tensor projected_exponential_internal(const Tensor &hp, const Scalar &tau) {
+        if (Type.is_complex(tau.dtype())) {
+          const cytnx_complex128 tau_cd(static_cast<cytnx_double>(tau.real()),
+                                        static_cast<cytnx_double>(tau.imag()));
+          return linalg::ExpH(hp, tau_cd, cytnx_complex128(0.0, 0.0));
+        }
+        return linalg::ExpH(hp, static_cast<cytnx_double>(tau.real()), cytnx_double(0.0));
+      }
+
       Tensor resize_mat_internal(const Tensor &src, const cytnx_uint64 r, const cytnx_uint64 c) {
         const auto min_r = std::min(r, src.shape()[0]);
         const auto min_c = std::min(c, src.shape()[1]);
@@ -332,8 +341,7 @@ namespace cytnx {
 
           // Converge check
           Hp_sub = resize_mat_internal(Hp, i + 1, i + 1);
-          // We use ExpM since H*tau may not be Hermitian if tau is complex.
-          B_mat = linalg::ExpM(Hp_sub * tau);
+          B_mat = projected_exponential_internal(Hp_sub, tau);
           // Set the error as the element of bottom left of the exp(H_sub*tau)
           auto error = abs(B_mat.at({(cytnx_uint64)i, 0}));
           if (error < CvgCrit) {
@@ -352,7 +360,7 @@ namespace cytnx {
         }
         if (B_mat.dtype() == Type.Void) {
           Hp_sub = resize_mat_internal(Hp, Vs.size(), Vs.size());
-          B_mat = linalg::ExpM(Hp_sub * tau);
+          B_mat = projected_exponential_internal(Hp_sub, tau);
         }
 
         // Let V_k be the n × (k + 1) matrix whose columns are v[0],...,v[k] respectively.
