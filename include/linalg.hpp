@@ -2691,17 +2691,22 @@ namespace cytnx {
     /**
     @brief perform Lanczos for hermitian/symmetric matrices or linear function.
     @details
-        This function calculate the eigen value problem using explicitly restarted Lanczos.
-    #Performance tune:
-        For small linear dimension, try to reduce max_krydim.
+        This legacy explicitly restarted Lanczos entry point is disabled because the old
+    implementation was numerically incorrect. For general Hermitian eigenvalue problems, use the
+    ARPACK-backed Lanczos(..., which="SA") entry point for the smallest algebraic eigenvalue, or
+    choose another ARPACK `which` selector as needed. The Lanczos(..., method="Gnd") path is a
+    non-restarted Lanczos routine intended for specialized local ground-state solves where bounded
+    matvec count is more important than standalone eigensolver semantics.
     @param[in] Hop the Linear Operator defined by LinOp class or it's inheritance (see LinOp).
     @param[in] Tin the initial vector, this should be rank-1.
     @param[in] method
     @parblock
-    the desired Lanczos method to use, the supported options are:
+    the desired Lanczos method to use, the supported option is:
 
-    <b>'ER'</b> : explicitly restarted Lanczos
-    <b>'Gnd'</b> : naive Lanczos
+    <b>'Gnd'</b> : non-restarted local ground-state Lanczos
+
+    The legacy <b>'ER'</b> explicitly restarted Lanczos implementation is disabled because it was
+    numerically incorrect.
 
     @endparblock
 
@@ -2719,10 +2724,10 @@ namespace cytnx {
   creating a class that inherits LinOp (see LinOp for further details).
     */
     std::vector<Tensor> Lanczos(LinOp *Hop, const Tensor &Tin = Tensor(),
-                                const std::string method = "Gnd", const double &CvgCrit = 1.0e-14,
-                                const unsigned int &Maxiter = 10000, const cytnx_uint64 &k = 1,
-                                const bool &is_V = true, const bool &is_row = false,
-                                const cytnx_uint32 &max_krydim = 0, const bool &verbose = false);
+                                const std::string method = "Gnd", double CvgCrit = 1.0e-14,
+                                unsigned int Maxiter = 20, cytnx_uint64 k = 1, bool is_V = true,
+                                bool is_row = false, cytnx_uint32 max_krydim = 0,
+                                bool verbose = false);
     /**
   @brief Performs Lanczos iteration for matrices or linear functions.
   @details This function calculates the eigenvalue problem using the Lanczos algorithm. It calls
@@ -2827,17 +2832,20 @@ namespace cytnx {
     /**
     @brief perform Lanczos for hermitian/symmetric matrices or linear function.
     @details
-        This function calculate the eigen value problem using explicitly restarted Lanczos.
-    #Performance tune:
-        For small linear dimension, try to reduce max_krydim.
+        This legacy method-style entry point supports only method="Gnd". The old method="ER"
+    implementation is disabled because it was numerically incorrect. For generic ground-state
+    eigensolver use, prefer the ARPACK-backed Lanczos(..., which="SA") overload. The method="Gnd"
+    path is a non-restarted Lanczos routine intended for specialized local solves where bounded
+    matvec count is more important than standalone eigensolver semantics.
     @param[in] Hop the Linear Operator defined by LinOp class or it's inheritance (see LinOp).
     @param[in] Tin the initial vector, this should be rank-1.
     @param[in] method
     @parblock
-    the desired Lanczos method to use, the supported options are:
+    the desired Lanczos method to use, the supported option is:
 
-    <b>'ER'</b> : explicitly restarted Lanczos
-    <b>'Gnd'</b> : naive Lanczos
+    <b>'Gnd'</b> : non-restarted local ground-state Lanczos
+
+    The legacy <b>'ER'</b> explicitly restarted Lanczos implementation is disabled.
 
     @endparblock
 
@@ -2858,20 +2866,20 @@ namespace cytnx {
     incorrect.
     */
     std::vector<UniTensor> Lanczos(LinOp *Hop, const cytnx::UniTensor &Tin = UniTensor(),
-                                   const std::string method = "Gnd",
-                                   const double &CvgCrit = 1.0e-14,
-                                   const unsigned int &Maxiter = 10000, const cytnx_uint64 &k = 1,
-                                   const bool &is_V = true, const bool &is_row = false,
-                                   const cytnx_uint32 &max_krydim = 4, const bool &verbose = false);
+                                   const std::string method = "Gnd", double CvgCrit = 1.0e-14,
+                                   unsigned int Maxiter = 20, cytnx_uint64 k = 1, bool is_V = true,
+                                   bool is_row = false, cytnx_uint32 max_krydim = 0,
+                                   bool verbose = false);
 
     // Lanczos:
     //===========================================
     /**
     @brief perform Lanczos for hermitian/symmetric matrices or linear function.
     @details
-        This function calculate the eigen value problem using explicitly restarted Lanczos.
-    #Performance tune:
-        For small linear dimension, try to reduce max_krydim.
+        This legacy explicitly restarted Lanczos entry point is disabled because the old
+    implementation was numerically incorrect. For general Hermitian eigenvalue problems, use the
+    ARPACK-backed Lanczos(..., which="SA") overload for the smallest algebraic eigenvalue, or choose
+    another ARPACK `which` selector as needed.
     @param[in] Hop the Linear Operator defined by LinOp class or it's inheritance (see LinOp).
     @param[in] k the number of lowest k eigen values.
     @param[in] is_V if set to true, the eigen vectors will be returned.
@@ -2879,7 +2887,7 @@ namespace cytnx {
     @param[in] CvgCrit the convergence criterion of the energy.
     @param[in] is_row whether the return eigen vectors should be in row-major form.
     @param[in] Tin the initial vector, this should be rank-1
-    @param[in] max_krydim the maximum krylov subspace dimension for each iteration.
+    @param[in] max_krydim ignored because this legacy entry point is disabled.
     @param[in] verbose print out iteration info.
     @return
         [eigvals (Tensor), eigvecs (Tensor)(option)]
@@ -2887,11 +2895,10 @@ namespace cytnx {
         To use, define a linear operator with LinOp class either by assign a custom function or
     create a class that inherit LinOp (see LinOp for further details)
     */
-    std::vector<Tensor> Lanczos_ER(LinOp *Hop, const cytnx_uint64 &k = 1, const bool &is_V = true,
-                                   const cytnx_uint64 &maxiter = 10000,
-                                   const double &CvgCrit = 1.0e-14, const bool &is_row = false,
-                                   const Tensor &Tin = Tensor(), const cytnx_uint32 &max_krydim = 4,
-                                   const bool &verbose = false);
+    std::vector<Tensor> Lanczos_ER(LinOp *Hop, cytnx_uint64 k = 1, bool is_V = true,
+                                   cytnx_uint64 maxiter = 10000, double CvgCrit = 1.0e-14,
+                                   bool is_row = false, const Tensor &Tin = Tensor(),
+                                   cytnx_uint32 max_krydim = 4, bool verbose = false);
 
     // Lanczos:
     //===========================================
@@ -2899,8 +2906,8 @@ namespace cytnx {
     @brief perform Lanczos for hermitian/symmetric matrices or linear function to get ground state
     and lowest eigen value
     @details
-        This function calculate the eigen value problem using naive Lanczos to get ground state and
-    lowest eigen value.
+        This function uses non-restarted Lanczos to approximate a local ground state. For generic
+    ground-state eigensolver use, prefer the ARPACK-backed Lanczos(..., which="SA") overload.
     @param[in] Hop the Linear Operator defined by LinOp class or it's inheritance (see LinOp).
     @param[in] CvgCrit the convergence criterion of the energy.
     @param[in] is_V if set to true, the eigen vectors will be returned.
@@ -2913,9 +2920,9 @@ namespace cytnx {
         To use, define a linear operator with LinOp class either by assign a custom function or
     create a class that inherit LinOp (see LinOp for further details)
     */
-    std::vector<Tensor> Lanczos_Gnd(LinOp *Hop, const double &CvgCrit = 1.0e-14,
-                                    const bool &is_V = true, const Tensor &Tin = Tensor(),
-                                    const bool &verbose = false, const unsigned int &Maxiter = 100);
+    std::vector<Tensor> Lanczos_Gnd(LinOp *Hop, double CvgCrit = 1.0e-14, bool is_V = true,
+                                    const Tensor &Tin = Tensor(), bool verbose = false,
+                                    unsigned int Maxiter = 20);
 
     // Lanczos:
     //===============================================
@@ -2923,8 +2930,8 @@ namespace cytnx {
     @brief perform Lanczos for hermitian/symmetric matrices or linear function to get ground state
     and lowest eigen value
     @details
-        This function calculate the eigen value problem using naive Lanczos to get ground state and
-    lowest eigen value.
+        This function uses non-restarted Lanczos to approximate a local ground state. For generic
+    ground-state eigensolver use, prefer the ARPACK-backed Lanczos(..., which="SA") overload.
     @param[in] Hop the Linear Operator defined by LinOp class or it's inheritance (see LinOp).
     @param[in] CvgCrit the convergence criterion of the energy.
     @param[in] is_V if set to true, the eigen vectors will be returned.
@@ -2938,9 +2945,8 @@ namespace cytnx {
     create a class that inherit LinOp (see LinOp for further details)
     */
     std::vector<UniTensor> Lanczos_Gnd_Ut(LinOp *Hop, const cytnx::UniTensor &Tin,
-                                          const double &CvgCrit = 1.0e-14, const bool &is_V = true,
-                                          const bool &verbose = false,
-                                          const unsigned int &Maxiter = 100);
+                                          double CvgCrit = 1.0e-14, bool is_V = true,
+                                          bool verbose = false, unsigned int Maxiter = 20);
 
     // Lanczos_Exp:
     //===============================================

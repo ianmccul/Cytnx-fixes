@@ -134,6 +134,20 @@ namespace {
     std::vector<unsigned int> input_dtypes;
   };
 
+  class OneDimTensorScaleOp : public LinOp {
+   public:
+    OneDimTensorScaleOp() : LinOp("mv", 1, Type.Double, Device.cpu) {}
+
+    Tensor matvec_impl(const Tensor& v) override { return 3.0 * v; }
+  };
+
+  class OneDimUniTensorScaleOp : public LinOp {
+   public:
+    OneDimUniTensorScaleOp() : LinOp("mv", 1, Type.Double, Device.cpu) {}
+
+    UniTensor matvec_impl(const UniTensor& v) override { return 3.0 * v; }
+  };
+
   UniTensor TwoStateInitialVector(const unsigned int dtype) {
     auto v = UniTensor::zeros({2, 1}, {}, dtype, Device.cpu).set_rowrank_(1);
     v.at({0, 0}) = 0.6;
@@ -471,6 +485,31 @@ TEST(Lanczos_Gnd, Bk_Lanczos_test) {
   auto err = (H.matvec(eigs[1]) - ev * eigs[1]).Norm().item();
   EXPECT_TRUE(err < 1e-12);
   // EXPECT_DOUBLE_EQ(ev, evans);
+}
+
+TEST(Lanczos_Gnd, TensorOneDimensionalKrylovSpace) {
+  OneDimTensorScaleOp op;
+  auto v = ones(1, Type.Double);
+
+  auto eigs = linalg::Lanczos(&op, v, "Gnd", 1.0e-12, 10, 1, true);
+
+  ASSERT_EQ(eigs.size(), 2);
+  EXPECT_NEAR(eigs[0].item<double>(), 3.0, 1.0e-12);
+  auto residual = (op.matvec(eigs[1]) - 3.0 * eigs[1]).Norm().item<double>();
+  EXPECT_LE(residual, 1.0e-12);
+}
+
+TEST(Lanczos_Gnd, UniTensorOneDimensionalKrylovSpace) {
+  OneDimUniTensorScaleOp op;
+  auto v = UniTensor::zeros({1, 1}, {}, Type.Double, Device.cpu).set_rowrank_(1);
+  v.at({0, 0}) = 1.0;
+
+  auto eigs = linalg::Lanczos(&op, v, "Gnd", 1.0e-12, 10, 1, true);
+
+  ASSERT_EQ(eigs.size(), 2);
+  EXPECT_NEAR(eigs[0].get_block_().item<double>(), 3.0, 1.0e-12);
+  auto residual = (op.matvec(eigs[1]) - 3.0 * eigs[1]).Norm().item<double>();
+  EXPECT_LE(residual, 1.0e-12);
 }
 
 TEST(Lanczos_Gnd, FloatKrylovVectorsRemainFloatInUniTensorGnd) {

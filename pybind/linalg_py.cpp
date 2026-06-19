@@ -929,25 +929,25 @@ void linalg_binding(py::module &m) {
 
   m_linalg.def(
     "Lanczos",
-    [](LinOp *Hop, const Tensor &Tin, const std::string method, const double &CvgCrit,
-       const unsigned int &Maxiter, const cytnx_uint64 &k, const bool &is_V, const bool &is_row,
-       const cytnx_uint32 &max_krydim, const bool &verbose) {
+    [](LinOp *Hop, const Tensor &Tin, const std::string method, double CvgCrit,
+       unsigned int Maxiter, cytnx_uint64 k, bool is_V, bool is_row, cytnx_uint32 max_krydim,
+       bool verbose) {
       return cytnx::linalg::Lanczos(Hop, Tin, method, CvgCrit, Maxiter, k, is_V, is_row, max_krydim,
                                     verbose);
     },
     py::arg("Hop"), py::arg("Tin"), py::arg("method"), py::arg("CvgCrit") = 1.0e-14,
-    py::arg("Maxiter") = 10000, py::arg("k") = 1, py::arg("is_V") = true, py::arg("is_row") = false,
+    py::arg("Maxiter") = 20, py::arg("k") = 1, py::arg("is_V") = true, py::arg("is_row") = false,
     py::arg("max_krydim") = 0, py::arg("verbose") = false);
   m_linalg.def(
     "Lanczos",
-    [](LinOp *Hop, const UniTensor &Tin, const std::string method, const double &CvgCrit,
-       const unsigned int &Maxiter, const cytnx_uint64 &k, const bool &is_V, const bool &is_row,
-       const cytnx_uint32 &max_krydim, const bool &verbose) {
+    [](LinOp *Hop, const UniTensor &Tin, const std::string method, double CvgCrit,
+       unsigned int Maxiter, cytnx_uint64 k, bool is_V, bool is_row, cytnx_uint32 max_krydim,
+       bool verbose) {
       return cytnx::linalg::Lanczos(Hop, Tin, method, CvgCrit, Maxiter, k, is_V, is_row, max_krydim,
                                     verbose);
     },
     py::arg("Hop"), py::arg("Tin"), py::arg("method"), py::arg("CvgCrit") = 1.0e-14,
-    py::arg("Maxiter") = 10000, py::arg("k") = 1, py::arg("is_V") = true, py::arg("is_row") = false,
+    py::arg("Maxiter") = 20, py::arg("k") = 1, py::arg("is_V") = true, py::arg("is_row") = false,
     py::arg("max_krydim") = 0, py::arg("verbose") = false);
 
   m_linalg.def(
@@ -986,28 +986,6 @@ void linalg_binding(py::module &m) {
       return cytnx::linalg::Lstsq(A, b, rcond);
     },
     py::arg("A"), py::arg("b"), py::arg("rcond") = float(-1));
-
-  /*
-  m_linalg.def("c_Lanczos_ER",
-               [](LinOp *Hop, const cytnx_uint64 &k, const bool &is_V, const cytnx_uint64 &maxiter,
-                  const double &CvgCrit, const bool &is_row, const Tensor &Tin,
-                  const cytnx_uint32 &max_krydim, const bool &verbose) {
-                 return cytnx::linalg::Lanczos_ER(Hop, k, is_V, maxiter, CvgCrit, is_row, Tin,
-                                                  max_krydim, verbose);
-               });
-
-  m_linalg.def("c_Lanczos_Gnd",
-               [](LinOp *Hop, const double &CvgCrit, const bool &is_V, const Tensor &Tin,
-                  const bool &verbose, const cytnx_uint64 &maxiter) {
-                 return cytnx::linalg::Lanczos_Gnd(Hop, CvgCrit, is_V, Tin, verbose, maxiter);
-               });
-
-  m_linalg.def("c_Lanczos_Gnd_Ut",
-               [](LinOp *Hop, const UniTensor &Tin, const double &CvgCrit, const bool &is_V,
-                  const bool &verbose, const cytnx_uint64 &maxiter) {
-                 return cytnx::linalg::Lanczos_Gnd_Ut(Hop, Tin, CvgCrit, is_V, verbose, maxiter);
-               });
-  */
 }
 
 #endif
