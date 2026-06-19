@@ -19,6 +19,27 @@ namespace cytnx {
     typedef Accessor ac;
     using namespace std;
 
+    namespace {
+      unsigned int promoted_working_dtype_internal(const unsigned int input_dtype,
+                                                   const unsigned int op_dtype) {
+        if (op_dtype == Type.Void) {
+          return input_dtype;
+        }
+        return Type.type_promote(input_dtype, op_dtype);
+      }
+
+      unsigned int hermitian_projection_dtype_internal(const unsigned int dtype) {
+        return dtype < 3 ? dtype + 2 : dtype;
+      }
+
+      Scalar real_scalar_for_dtype_internal(const double value, const unsigned int dtype) {
+        if (dtype == Type.Float || dtype == Type.ComplexFloat) {
+          return Scalar(static_cast<cytnx_float>(value));
+        }
+        return Scalar(static_cast<cytnx_double>(value));
+      }
+    }  // namespace
+
     // <A|B>
     static Scalar _Dot(const UniTensor &A, const UniTensor &B) {
       // For a fermionic tensor the bra-ket contraction carries sign flips; applying
@@ -39,7 +60,8 @@ namespace cytnx {
 
       // Frobenius norm is sign-flip independent, so it is the correct vector norm for fermionic
       // tensors too (and equals sqrt(<Tin|Tin>) for bosonic).
-      double Norm = double(Tin.Norm().item().real());
+      const unsigned int input_dtype = Tin.dtype();
+      auto Norm = real_scalar_for_dtype_internal(double(Tin.Norm().item().real()), input_dtype);
 
       UniTensor psi_1 = Tin / Norm;
       psi_1.contiguous_();
@@ -55,7 +77,7 @@ namespace cytnx {
       bool cvg_fin = false;
 
       // declare variables, A,B should be real if LinOp is hermitian!
-      Tensor As = zeros({1}, Hop->dtype() < 3 ? Hop->dtype() + 2 : Hop->dtype(), Tin.device());
+      Tensor As = zeros({1}, hermitian_projection_dtype_internal(Tin.dtype()), Tin.device());
       Tensor Bs = As.clone();
       Scalar E;
 
@@ -82,7 +104,7 @@ namespace cytnx {
       auto alpha = _Dot(new_psi, psi_1).real();
       As(0) = alpha;
       new_psi -= alpha * psi_1;
-      auto beta = new_psi.Norm().item();
+      auto beta = real_scalar_for_dtype_internal(double(new_psi.Norm().item().real()), input_dtype);
       Bs(0) = beta;
       psi_0 = psi_1;
       new_psi /= beta;
@@ -115,7 +137,7 @@ namespace cytnx {
           break;
         }
 
-        beta = new_psi.Norm().item();
+        beta = real_scalar_for_dtype_internal(double(new_psi.Norm().item().real()), input_dtype);
         Bs.append(beta);
 
         if (beta == 0) {
@@ -169,24 +191,22 @@ namespace cytnx {
     std::vector<UniTensor> Lanczos_Gnd_Ut(LinOp *Hop, const UniTensor &Tin, const double &CvgCrit,
                                           const bool &is_V, const bool &verbose,
                                           const unsigned int &Maxiter) {
-      // check type:
-      cytnx_error_msg(
-        !Type.is_float(Hop->dtype()),
-        "[ERROR][Lanczos] Lanczos can only accept operator with floating types (complex/real)%s",
-        "\n");
-
       // check criteria and maxiter:
       cytnx_error_msg(CvgCrit <= 0, "[ERROR][Lanczos] converge criteria must >0%s", "\n");
       cytnx_error_msg(Maxiter < 2, "[ERROR][Lanczos] Maxiter must >1%s", "\n");
 
       UniTensor v0;
-      v0 = Tin.astype(Hop->dtype());
+      cytnx_error_msg(!Type.is_float(Tin.dtype()),
+                      "[ERROR][Lanczos] Lanczos can only accept input tensors with floating types "
+                      "(complex/real)%s",
+                      "\n");
+      v0 = Tin.astype(promoted_working_dtype_internal(Tin.dtype(), Hop->dtype()));
 
       std::vector<UniTensor> out;
 
       double _cvgcrit = CvgCrit;
 
-      if (Hop->dtype() == Type.Float || Hop->dtype() == Type.ComplexFloat) {
+      if (v0.dtype() == Type.Float || v0.dtype() == Type.ComplexFloat) {
         if (_cvgcrit < 1.0e-7) {
           _cvgcrit = 1.0e-7;
           cytnx_warning_msg(_cvgcrit < 1.0e-7,

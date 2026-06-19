@@ -477,8 +477,7 @@ void linalg_binding(py::module &m) {
     },
     py::arg("Tin"), py::arg("a"), py::arg("b") = cytnx::cytnx_uint16(0));
 
-  m_linalg.def(
-    "ExpH", [](const Tensor &Tin) { return cytnx::linalg::ExpH(Tin); }, py::arg("Tin"));
+  m_linalg.def("ExpH", [](const Tensor &Tin) { return cytnx::linalg::ExpH(Tin); }, py::arg("Tin"));
 
   // UT
   m_linalg.def(
@@ -741,8 +740,7 @@ void linalg_binding(py::module &m) {
     },
     py::arg("Tin"), py::arg("a"), py::arg("b") = cytnx::cytnx_uint16(0));
 
-  m_linalg.def(
-    "ExpM", [](const Tensor &Tin) { return cytnx::linalg::ExpM(Tin); }, py::arg("Tin"));
+  m_linalg.def("ExpM", [](const Tensor &Tin) { return cytnx::linalg::ExpM(Tin); }, py::arg("Tin"));
 
   m_linalg.def(
     "Qr",
@@ -764,15 +762,12 @@ void linalg_binding(py::module &m) {
   // m_linalg.def("InvM", &cytnx::linalg::InvM, py::arg("Tin"));
 
   // m_linalg.def("InvM_", &cytnx::linalg::InvM_, py::arg("Tio"));
-  m_linalg.def(
-    "InvM_", [](cytnx::UniTensor &Tio) { cytnx::linalg::InvM_(Tio); }, py::arg("Tio"));
-  m_linalg.def(
-    "InvM_", [](cytnx::Tensor &Tio) { cytnx::linalg::InvM_(Tio); }, py::arg("Tio"));
+  m_linalg.def("InvM_", [](cytnx::UniTensor &Tio) { cytnx::linalg::InvM_(Tio); }, py::arg("Tio"));
+  m_linalg.def("InvM_", [](cytnx::Tensor &Tio) { cytnx::linalg::InvM_(Tio); }, py::arg("Tio"));
 
   m_linalg.def(
     "InvM", [](cytnx::UniTensor &Tin) { return cytnx::linalg::InvM(Tin); }, py::arg("Tin"));
-  m_linalg.def(
-    "InvM", [](cytnx::Tensor &Tin) { return cytnx::linalg::InvM(Tin); }, py::arg("Tin"));
+  m_linalg.def("InvM", [](cytnx::Tensor &Tin) { return cytnx::linalg::InvM(Tin); }, py::arg("Tin"));
 
   m_linalg.def(
     "Inv", [](const UniTensor &Tin, double clip) { return cytnx::linalg::Inv(Tin, clip); },
@@ -791,14 +786,12 @@ void linalg_binding(py::module &m) {
   m_linalg.def(
     "Conj", [](const cytnx::Tensor &Tin) { return cytnx::linalg::Conj(Tin); }, py::arg("Tin"));
 
-  m_linalg.def(
-    "Conj_", [](cytnx::Tensor &Tin) { cytnx::linalg::Conj_(Tin); }, py::arg("Tin"));
+  m_linalg.def("Conj_", [](cytnx::Tensor &Tin) { cytnx::linalg::Conj_(Tin); }, py::arg("Tin"));
 
   m_linalg.def(
     "Conj", [](const cytnx::UniTensor &Tin) { return cytnx::linalg::Conj(Tin); }, py::arg("Tin"));
 
-  m_linalg.def(
-    "Conj_", [](cytnx::UniTensor &Tin) { cytnx::linalg::Conj_(Tin); }, py::arg("Tin"));
+  m_linalg.def("Conj_", [](cytnx::UniTensor &Tin) { cytnx::linalg::Conj_(Tin); }, py::arg("Tin"));
 
   m_linalg.def("Matmul", &cytnx::linalg::Matmul, py::arg("T1"), py::arg("T2"));
   m_linalg.def("Matmul_dg", &cytnx::linalg::Matmul_dg, py::arg("T1"), py::arg("T2"));
@@ -819,10 +812,8 @@ void linalg_binding(py::module &m) {
 
   // m_linalg.def("Norm", &cytnx::linalg::Norm, py::arg("T1") = cytnx::Tensor());
   // m_linalg.def("Norm", &cytnx::linalg::Norm, py::arg("T1") = cytnx::UniTensor());
-  m_linalg.def(
-    "Norm", [](cytnx::UniTensor &T1) { return cytnx::linalg::Norm(T1); }, py::arg("T1"));
-  m_linalg.def(
-    "Norm", [](cytnx::Tensor &T1) { return cytnx::linalg::Norm(T1); }, py::arg("T1"));
+  m_linalg.def("Norm", [](cytnx::UniTensor &T1) { return cytnx::linalg::Norm(T1); }, py::arg("T1"));
+  m_linalg.def("Norm", [](cytnx::Tensor &T1) { return cytnx::linalg::Norm(T1); }, py::arg("T1"));
 
   m_linalg.def("Dot", &cytnx::linalg::Dot, py::arg("T1"), py::arg("T2"));
   m_linalg.def(
@@ -985,7 +976,7 @@ void linalg_binding(py::module &m) {
       return cytnx::linalg::Lanczos_Exp(Hop, v, tau, CvgCrit, Maxiter, verbose);
     },
     py::arg("Hop"), py::arg("v"), py::arg("tau"), py::arg("CvgCrit") = 1.0e-14,
-    py::arg("Maxiter") = 10000, py::arg("verbose") = false);
+    py::arg("Maxiter") = 100, py::arg("verbose") = false);
 
   m_linalg.def(
     "Lstsq",

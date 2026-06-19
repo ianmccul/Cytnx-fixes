@@ -14,7 +14,7 @@ namespace {
     Tensor opMat;
     Tensor T_init;
     MatOp(const cytnx_uint64& nx, const int& dtype, const int& in_device);
-    Tensor matvec(const Tensor& v) override { return (linalg::Dot(opMat, v)); }
+    Tensor matvec_impl(const Tensor& v) override { return (linalg::Dot(opMat, v)); }
     void InitVec();
     friend class CheckOp;
   };
@@ -43,7 +43,7 @@ namespace {
       opMat = op->opMat.to(Device.cpu);
       T_init = op->T_init.to(Device.cpu);
     }
-    Tensor matvec(const Tensor& v) override { return (linalg::Dot(opMat, v)); }
+    Tensor matvec_impl(const Tensor& v) override { return (linalg::Dot(opMat, v)); }
   };
 
   // the function to check the answer

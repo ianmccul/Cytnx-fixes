@@ -55,6 +55,18 @@ namespace cytnx {
       }
     }
 
+    static unsigned int promoted_working_dtype(const unsigned int input_dtype,
+                                               const unsigned int op_dtype,
+                                               const unsigned int default_dtype = Type.Double) {
+      if (input_dtype == Type.Void) {
+        return op_dtype == Type.Void ? default_dtype : op_dtype;
+      }
+      if (op_dtype == Type.Void) {
+        return input_dtype;
+      }
+      return Type.type_promote(input_dtype, op_dtype);
+    }
+
     template <typename T, typename T_ten>
     static void pass_data_UT(T_ten &UT, T *data_ptr, bool to_UT) {
       auto device = UT.device();
@@ -202,14 +214,27 @@ namespace cytnx {
 
     // T_ten: Tensor or UniTensor
     template <typename T, typename T_ten>
-    static void matvec(LinOp *Hop, T_ten &buffer, T *v_in, T *v_out) {
+    static void matvec(LinOp *Hop, T_ten &buffer, T *v_in, T *v_out, bool &dtype_warning_issued) {
       buffer.contiguous_();
       pass_data_UT<T, T_ten>(buffer, v_in, true);
-      auto nextTens = Hop->matvec(buffer).astype(Hop->dtype());
-      cytnx_error_msg(nextTens.dtype() != Hop->dtype(),
-                      "[ERROR][Lanczos], the output dtype in the matvec is not "
-                      "consistent with the one in LinOp.%s",
-                      "\n");
+      auto nextTens = Hop->matvec(buffer);
+      if (nextTens.dtype() != buffer.dtype()) {
+        cytnx_error_msg(
+          Type.type_promote(nextTens.dtype(), buffer.dtype()) != buffer.dtype(),
+          "[ERROR][Lanczos], matvec returned dtype %s, which cannot be safely represented in the "
+          "ARPACK workspace dtype %s. Use a wider input vector or LinOp dtype hint.%s",
+          Type.getname(nextTens.dtype()).c_str(), Type.getname(buffer.dtype()).c_str(), "\n");
+        if (!dtype_warning_issued) {
+          cytnx_warning_msg(
+            true,
+            "[WARNING][Lanczos], matvec returned dtype %s while the ARPACK workspace dtype is %s. "
+            "Casting the output; the LinOp dtype hint may be wider than the actual operator "
+            "output.%s",
+            Type.getname(nextTens.dtype()).c_str(), Type.getname(buffer.dtype()).c_str(), "\n");
+          dtype_warning_issued = true;
+        }
+      }
+      nextTens = nextTens.astype(buffer.dtype());
       // Resolve any pending fermionic signflip so the raw block data copied out below corresponds
       // to all signflips applied; no-op for bosonic/dense tensors.
       if constexpr (std::is_same_v<T_ten, UniTensor>) nextTens.apply_();
@@ -267,7 +292,6 @@ namespace cytnx {
                          cytnx_int32 *ldv, cytnx_int32 *iparam, cytnx_int32 *ipntr, T *workd,
                          T *workl, cytnx_int32 *lworkl, cytnx_int32 *info)>
         func_xseupd;
-      auto dtype = Hop->dtype();
       if constexpr (std::is_same_v<T, cytnx_double>) {
         func_xsaupd = arpack::dsaupd_;
         func_xseupd = arpack::dseupd_;
@@ -325,12 +349,13 @@ namespace cytnx {
 
       /// start iteration
       int iter = 0;
+      bool dtype_warning_issued = false;
       while (true) {
         iter++;
         func_xsaupd(&ido, &bmat, &dim, which, &nev, &tol, resid, &ncv, v, &ldv, iparam, ipntr,
                     workd, workl, &lworkl, &info);
         if (ido == -1 || ido == 1) {
-          matvec(Hop, buffer_UT, &workd[ipntr[0] - 1], &workd[ipntr[1] - 1]);
+          matvec(Hop, buffer_UT, &workd[ipntr[0] - 1], &workd[ipntr[1] - 1], dtype_warning_issued);
         } else if (ido == 99) {
           break;
         } else {
@@ -406,7 +431,7 @@ namespace cytnx {
                   const std::string which, const cytnx_uint64 &maxiter, const double &CvgCrit,
                   const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
                   const bool &verbose) {
-      auto dtype = Hop->dtype();
+      auto dtype = UT_init.dtype();
       auto device = Hop->device();
       auto eigvals_tens = zeros({k}, dtype, device);
       out.push_back(UniTensor(eigvals_tens));
@@ -435,7 +460,7 @@ namespace cytnx {
                   const std::string which, const cytnx_uint64 &maxiter, const double &CvgCrit,
                   const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
                   const bool &verbose) {
-      auto dtype = Hop->dtype();
+      auto dtype = UT_init.dtype();
       auto device = Hop->device();
       auto eigvals_tens = zeros({k}, dtype, device);
       auto dim = Hop->nx();
@@ -461,31 +486,11 @@ namespace cytnx {
                                 const cytnx_uint64 &maxiter, const double &cvg_crit,
                                 const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
                                 const bool &verbose) {
-      // check type:
-      cytnx_error_msg(
-        !Type.is_float(Hop->dtype()),
-        "[ERROR][Lanczos] Lanczos can only accept operator with floating types (complex/real)%s",
-        "\n");
-
       // check which
       std::vector<std::string> accept_which = {"LM", "LA", "SA"};
       if (std::find(accept_which.begin(), accept_which.end(), which) == accept_which.end()) {
         cytnx_error_msg(true, "[ERROR][Lanczos] 'which' should be 'LM', 'LA', 'SA'", "\n");
       }
-      if (Type.is_complex(Hop->dtype())) {
-        try {
-          std::string tmp_which = which;
-          if (which == "LA") {
-            tmp_which = "LR";
-          } else if (which == "SA") {
-            tmp_which = "SR";
-          }
-          return Arnoldi(Hop, T_init, tmp_which, maxiter, cvg_crit, k, is_V, ncv, verbose);
-        } catch (...) {
-          cytnx_error_msg(true, "[ERROR][Lanczos], error from Arnoldi algorithm.%s", "\n");
-        }
-      }
-
       /// check k
       cytnx_error_msg(k < 1, "[ERROR][Lanczos] k should be >0%s", "\n");
       cytnx_error_msg(k > Hop->nx(),
@@ -495,17 +500,27 @@ namespace cytnx {
       // check Tin should be rank-1:
       auto _T_init = T_init.clone();
       if (T_init.dtype() == Type.Void) {
-        _T_init =
-          cytnx::random::normal({Hop->nx()}, Hop->dtype(), Hop->device());  // randomly initialize.
+        _T_init = cytnx::random::normal({Hop->nx()}, 0, 1, Hop->device())
+                    .astype(promoted_working_dtype(Type.Void, Hop->dtype()));
       } else {
         cytnx_error_msg(_T_init.shape().size() != 1, "[ERROR][Lanczos] Tin should be rank-1%s",
                         "\n");
         cytnx_error_msg(_T_init.shape()[0] != Hop->nx(),
                         "[ERROR][Lanczos] Tin should have dimension consistent with Hop: [%d] %s",
                         Hop->nx(), "\n");
-        cytnx_error_msg(_T_init.dtype() != Hop->dtype(),
-                        "[ERROR][Lanczos] Tin should have datatype consistent with Hop: [%d] %s",
-                        Hop->dtype(), "\n");
+        cytnx_error_msg(!Type.is_float(_T_init.dtype()),
+                        "[ERROR][Lanczos] Tin should have floating dtype.%s", "\n");
+        _T_init = _T_init.astype(promoted_working_dtype(_T_init.dtype(), Hop->dtype()));
+      }
+
+      if (Type.is_complex(_T_init.dtype())) {
+        std::string tmp_which = which;
+        if (which == "LA") {
+          tmp_which = "LR";
+        } else if (which == "SA") {
+          tmp_which = "SR";
+        }
+        return Arnoldi(Hop, _T_init, tmp_which, maxiter, cvg_crit, k, is_V, ncv, verbose);
       }
 
       cytnx_error_msg(cvg_crit < 0, "[ERROR][Lanczos] cvg_crit should be >= 0%s", "\n");
@@ -523,12 +538,6 @@ namespace cytnx {
                                    const cytnx_uint64 &maxiter, const double &cvg_crit,
                                    const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
                                    const bool &verbose) {
-      // check type:
-      cytnx_error_msg(
-        !Type.is_float(Hop->dtype()),
-        "[ERROR][Lanczos] Lanczos can only accept operator with floating types (complex/real)%s",
-        "\n");
-
       // check which
       std::vector<std::string> accept_which = {"LM", "LA", "SA"};
       if (std::find(accept_which.begin(), accept_which.end(), which) == accept_which.end()) {
@@ -537,20 +546,6 @@ namespace cytnx {
 
       // If the operator is complex Hermitian, just call Arnoldi algorthm since there is no
       //     specific routine for complex Hermitian operaton in arpack.
-      if (Type.is_complex(Hop->dtype())) {
-        try {
-          std::string tmp_which = which;
-          if (which == "LA") {
-            tmp_which = "LR";
-          } else if (which == "SA") {
-            tmp_which = "SR";
-          }
-          return Arnoldi(Hop, UT_init, tmp_which, maxiter, cvg_crit, k, is_V, ncv, verbose);
-        } catch (...) {
-          cytnx_error_msg(true, "[ERROR][Lanczos], error from Arnoldi algorithm.%s", "\n");
-        }
-      }
-
       /// check k
       cytnx_error_msg(k < 1, "[ERROR][Lanczos] k should be >0%s", "\n");
       cytnx_error_msg(k > Hop->nx(),
@@ -558,6 +553,7 @@ namespace cytnx {
                       "\n");
 
       // check Tin should be rank-1:
+      auto _UT_init = UT_init;
       if (UT_init.dtype() == Type.Void) {
         cytnx_error_msg(k < 1, "[ERROR][Lanczos] The initial UniTensor sould be defined.%s", "\n");
       } else {
@@ -565,9 +561,19 @@ namespace cytnx {
         cytnx_error_msg(dim != Hop->nx(),
                         "[ERROR][Lanczos] Tin should have dimension consistent with Hop: [%d] %s",
                         Hop->nx(), "\n");
-        cytnx_error_msg(UT_init.dtype() != Hop->dtype(),
-                        "[ERROR][Lanczos] Tin should have datatype consistent with Hop: [%d] %s",
-                        Hop->dtype(), "\n");
+        cytnx_error_msg(!Type.is_float(UT_init.dtype()),
+                        "[ERROR][Lanczos] Tin should have floating dtype.%s", "\n");
+        _UT_init = UT_init.astype(promoted_working_dtype(UT_init.dtype(), Hop->dtype()));
+      }
+
+      if (Type.is_complex(_UT_init.dtype())) {
+        std::string tmp_which = which;
+        if (which == "LA") {
+          tmp_which = "LR";
+        } else if (which == "SA") {
+          tmp_which = "SR";
+        }
+        return Arnoldi(Hop, _UT_init, tmp_which, maxiter, cvg_crit, k, is_V, ncv, verbose);
       }
 
       cytnx_error_msg(cvg_crit < 0, "[ERROR][Lanczos] cvg_crit should be >= 0%s", "\n");
@@ -576,7 +582,7 @@ namespace cytnx {
                       "be 2+k<=ncv<=nx%s",
                       "\n");
       auto out = std::vector<UniTensor>();
-      _Lanczos(out, Hop, UT_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose);
+      _Lanczos(out, Hop, _UT_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose);
       return out;
     }
 

@@ -68,15 +68,53 @@ namespace cytnx {
         return dtype;
       }
 
-      unsigned int lanczos_exp_output_dtype_internal(const unsigned int op_dtype,
-                                                     const unsigned int out_dtype) {
-        if (op_dtype == Type.Float) {
-          return Type.is_complex(out_dtype) ? Type.ComplexFloat : Type.Float;
-        }
-        if (op_dtype == Type.ComplexFloat) {
+      unsigned int complex_dtype_for_real_dtype_internal(const unsigned int dtype) {
+        if (dtype == Type.Float) {
           return Type.ComplexFloat;
         }
-        return out_dtype;
+        if (dtype == Type.Double) {
+          return Type.ComplexDouble;
+        }
+        return dtype;
+      }
+
+      unsigned int promote_optional_dtype_internal(const unsigned int left,
+                                                   const unsigned int right) {
+        if (left == Type.Void) {
+          return right;
+        }
+        if (right == Type.Void) {
+          return left;
+        }
+        return Type.type_promote(left, right);
+      }
+
+      unsigned int lanczos_exp_output_dtype_internal(const unsigned int working_dtype,
+                                                     const unsigned int tau_dtype) {
+        if (Type.is_complex(working_dtype)) {
+          return working_dtype;
+        }
+        if (Type.is_complex(tau_dtype)) {
+          return complex_dtype_for_real_dtype_internal(working_dtype);
+        }
+        return working_dtype;
+      }
+
+      unsigned int promoted_working_dtype_internal(const unsigned int input_dtype,
+                                                   const unsigned int op_dtype) {
+        return promote_optional_dtype_internal(input_dtype, op_dtype);
+      }
+
+      unsigned int promoted_output_dtype_internal(const unsigned int input_dtype,
+                                                  const unsigned int op_dtype,
+                                                  const unsigned int tau_dtype) {
+        const auto working_dtype = promoted_working_dtype_internal(input_dtype, op_dtype);
+        return lanczos_exp_output_dtype_internal(working_dtype, tau_dtype);
+      }
+
+      unsigned int projected_exponential_output_dtype_internal(const unsigned int output_dtype,
+                                                               const unsigned int projected_dtype) {
+        return output_dtype == Type.Void ? projected_dtype : output_dtype;
       }
 
       void cast_dense_output_internal(UniTensor &out, const unsigned int dtype) {
@@ -87,6 +125,13 @@ namespace cytnx {
       }
 
       double scalar_abs_internal(const Scalar &s) { return static_cast<double>(s.abs()); }
+
+      Scalar real_scalar_for_dtype_internal(const double value, const unsigned int dtype) {
+        if (dtype == Type.Float || dtype == Type.ComplexFloat) {
+          return Scalar(static_cast<cytnx_float>(value));
+        }
+        return Scalar(static_cast<cytnx_double>(value));
+      }
 
       Tensor projected_exponential_internal(const Tensor &hp, const Scalar &tau) {
         if (Type.is_complex(tau.dtype())) {
@@ -182,7 +227,7 @@ namespace cytnx {
         double eps1 = std::exp(-(k * std::log(k) + std::log(1.0 + Op_apprx_norm)));
 
         std::vector<UniTensor> vs;
-        Tensor as = zeros({(cytnx_uint64)k + 1, (cytnx_uint64)k + 1}, Hop->dtype(), Hop->device());
+        Tensor as = zeros({(cytnx_uint64)k + 1, (cytnx_uint64)k + 1}, Tin.dtype(), Tin.device());
 
         // Initialized v0 = v
         auto v = Tin;
@@ -278,20 +323,21 @@ namespace cytnx {
       }
 
       void Lanczos_Exp_Ut_internal(UniTensor &out, LinOp *Hop, const UniTensor &T, Scalar tau,
-                                   const double &CvgCrit, const unsigned int &Maxiter,
-                                   const bool &verbose) {
-        const double eps = dtype_epsilon_internal(Hop->dtype());
+                                   const unsigned int output_dtype, const double &CvgCrit,
+                                   const unsigned int &Maxiter, const bool &verbose) {
+        const unsigned int input_dtype = T.dtype();
+        const double eps = dtype_epsilon_internal(input_dtype);
         std::vector<UniTensor> vs;
         cytnx_uint32 vec_len = Hop->nx();
         cytnx_uint32 imp_maxiter = std::min(Maxiter, vec_len);
-        Tensor Hp = zeros({imp_maxiter, imp_maxiter}, krylov_matrix_dtype_internal(Hop->dtype()),
-                          Hop->device());
+        Tensor Hp =
+          zeros({imp_maxiter, imp_maxiter}, krylov_matrix_dtype_internal(input_dtype), T.device());
 
         Tensor B_mat;
         // prepare initial tensor and normalize
         auto v = T.clone();
         auto v_nrm = std::sqrt(double(Dot_internal(v, v).real()));
-        v = v / v_nrm;
+        v = v / real_scalar_for_dtype_internal(v_nrm, input_dtype);
 
         // first iteration
         auto wp = (Hop->matvec(v)).relabel_(v.labels());
@@ -321,7 +367,7 @@ namespace cytnx {
           auto beta_breakdown =
             kBetaBreakdownRoundoff * eps * beta_breakdown_scale * std::sqrt(static_cast<double>(i));
           if (beta > beta_breakdown) {
-            v = (w / beta).relabel_(v.labels());
+            v = (w / real_scalar_for_dtype_internal(beta, input_dtype)).relabel_(v.labels());
           } else {  // beta too small -> the norm of new vector too small. This vector cannot span
                     // the new dimension
             if (verbose) {
@@ -336,7 +382,8 @@ namespace cytnx {
           wp = (Hop->matvec(v)).relabel_(v.labels());
           alpha = Dot_internal(wp, v);
           Hp.at({(cytnx_uint64)i, (cytnx_uint64)i}) = alpha;
-          w = (wp - alpha * v - beta * v_old).relabel_(v.labels());
+          w = (wp - alpha * v - real_scalar_for_dtype_internal(beta, input_dtype) * v_old)
+                .relabel_(v.labels());
           beta_prev = beta;
 
           // Converge check
@@ -408,8 +455,8 @@ namespace cytnx {
         out = Contracts({T, VkDag_ut, B}, "", true);
         out = Contract(out, Vk_ut);
         out.set_rowrank_(v.rowrank());
-        cast_dense_output_internal(out,
-                                   lanczos_exp_output_dtype_internal(Hop->dtype(), out.dtype()));
+        cast_dense_output_internal(
+          out, projected_exponential_output_dtype_internal(output_dtype, out.dtype()));
       }
     }  // unnamed namespace
 
@@ -420,14 +467,13 @@ namespace cytnx {
       cytnx_error_msg(Hop->device() != Device.cpu,
                       "[ERROR][Lanczos_Exp] Lanczos_Exp still does not support cuda devices.%s",
                       "\n");
-      // check type:
-      cytnx_error_msg(!Type.is_float(Hop->dtype()),
-                      "[ERROR][Lanczos_Exp] Lanczos_Exp can only accept operator with "
-                      "floating types (complex/real)%s",
-                      "\n");
-
       cytnx_error_msg(Tin.uten_type() != UTenType.Dense,
                       "[ERROR][Lanczos_Exp] The Block UniTensor type is still not supported.%s",
+                      "\n");
+
+      cytnx_error_msg(!Type.is_float(Tin.dtype()),
+                      "[ERROR][Lanczos_Exp] Lanczos_Exp can only accept input tensors with "
+                      "floating types (complex/real)%s",
                       "\n");
 
       // check criteria and maxiter:
@@ -436,14 +482,19 @@ namespace cytnx {
 
       // check Tin should be rank-1:
 
+      // The Krylov basis dtype is determined by the state and operator. A complex timestep only
+      // makes the projected exponential and final output complex; it should not force a real
+      // operator to accept complex Krylov vectors.
       UniTensor v0;
-      v0 = Tin.astype(Hop->dtype());
+      v0 = Tin.astype(promoted_working_dtype_internal(Tin.dtype(), Hop->dtype()));
+      const auto output_dtype =
+        promoted_output_dtype_internal(Tin.dtype(), Hop->dtype(), tau.dtype());
 
       UniTensor out;
 
       double _cvgcrit = CvgCrit;
 
-      if (Hop->dtype() == Type.Float || Hop->dtype() == Type.ComplexFloat) {
+      if (v0.dtype() == Type.Float || v0.dtype() == Type.ComplexFloat) {
         const double cvgcrit_floor = float_cvgcrit_floor_internal();
         if (_cvgcrit < cvgcrit_floor) {
           _cvgcrit = cvgcrit_floor;
@@ -456,7 +507,7 @@ namespace cytnx {
       }
 
       // Lanczos_Exp_Ut_internal_positive(out, Hop, v0, _cvgcrit, Maxiter, verbose);
-      Lanczos_Exp_Ut_internal(out, Hop, v0, tau, _cvgcrit, Maxiter, verbose);
+      Lanczos_Exp_Ut_internal(out, Hop, v0, tau, output_dtype, _cvgcrit, Maxiter, verbose);
 
       return out;
 

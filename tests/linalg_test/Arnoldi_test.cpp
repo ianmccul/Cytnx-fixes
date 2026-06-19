@@ -16,20 +16,22 @@ namespace {
    public:
     Tensor opMat;
     Tensor T_init;
+    int dtype_;
     MatOp(const cytnx_uint64& nx = 1, const int& dtype = Type.Double);
-    Tensor matvec(const Tensor& v) override { return (linalg::Dot(opMat, v)); }
+    Tensor matvec_impl(const Tensor& v) override { return (linalg::Dot(opMat, v)); }
     void InitVec();
   };
-  MatOp::MatOp(const cytnx_uint64& in_nx, const int& in_dtype) : LinOp("mv", in_nx, in_dtype) {
-    opMat = zeros({in_nx, in_nx}, this->dtype(), this->device());
-    if (Type.is_float(this->dtype())) {
+  MatOp::MatOp(const cytnx_uint64& in_nx, const int& in_dtype)
+      : LinOp("mv", in_nx, in_dtype), dtype_(in_dtype) {
+    opMat = zeros({in_nx, in_nx}, dtype_, this->device());
+    if (Type.is_float(dtype_)) {
       random::normal_(opMat, 0.0, 1.0, 0);
     }
     InitVec();
   }
   void MatOp::InitVec() {
-    T_init = zeros(nx(), this->dtype());
-    if (Type.is_float(this->dtype())) {
+    T_init = zeros(nx(), dtype_);
+    if (Type.is_float(dtype_)) {
       random::normal_(T_init, 0.0, 1.0, 0);
     }
   }
@@ -42,7 +44,7 @@ namespace {
                   const cytnx_uint64& k = 4, cytnx_uint64 dim = 23) {
     MatOp H = MatOp(dim, mat_type);
     const cytnx_uint64 maxiter = 10000;
-    auto dtype = H.dtype();
+    auto dtype = H.dtype_;
     const cytnx_double cvg_crit = 0;
     std::vector<Tensor> arnoldi_eigs = linalg::Arnoldi(&H, H.T_init, which, maxiter, cvg_crit, k);
     bool is_pass = CheckResult(H, arnoldi_eigs, which, k);
@@ -131,7 +133,7 @@ namespace {
     // check the number of the eigenvalues
     cytnx_uint64 arnoldi_eigvals_len = arnoldi_eigvals.shape()[0];
     if (arnoldi_eigvals_len != k) return false;
-    auto dtype = H.dtype();
+    auto dtype = H.dtype_;
     const double tolerance = (dtype == Type.ComplexFloat || dtype == Type.Float) ? 1.0e-4 : 1.0e-12;
     for (cytnx_uint64 i = 0; i < k; ++i) {
       auto arnoldi_eigval = arnoldi_eigvals.storage().at(i);
@@ -227,7 +229,7 @@ TEST(Arnoldi, is_V_false) {
   int k = 3;
   MatOp H = MatOp(dim, Type.ComplexDouble);
   const cytnx_uint64 maxiter = 10000;
-  auto dtype = H.dtype();
+  auto dtype = H.dtype_;
   std::string which = "LM";
   const cytnx_double cvg_crit = 0;
   bool is_V = true;

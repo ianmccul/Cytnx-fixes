@@ -43,7 +43,7 @@ class MyOp2 : public LinOp {
     print(linalg::Eigh(T));
   }
 
-  UniTensor matvec(const UniTensor &in) {
+  UniTensor matvec_impl(const UniTensor &in) {
     auto T = arange(100).reshape(10, 10);
     T = T + T.permute(1, 0);
     auto H = UniTensor(T, 1);

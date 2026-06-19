@@ -41,7 +41,7 @@ namespace Lanczos_Exp_Ut_Test {
      * "vil":virtual in bond left
      * "po":physical out bond
      */
-    UniTensor matvec(const UniTensor& A) override {
+    UniTensor matvec_impl(const UniTensor& A) override {
       auto tmp = Contract(EffH, A);
       tmp.permute_({"vil", "pi", "vir"}, 1);
       tmp.relabel_(A.labels());
@@ -52,7 +52,7 @@ namespace Lanczos_Exp_Ut_Test {
   class OneDimScaleOp : public LinOp {
    public:
     OneDimScaleOp() : LinOp("mv", 1, Type.Double, Device.cpu) {}
-    UniTensor matvec(const UniTensor& A) override { return A * 3.0; }
+    UniTensor matvec_impl(const UniTensor& A) override { return A * 3.0; }
   };
 
   class SmallResidualOp : public LinOp {
@@ -60,13 +60,16 @@ namespace Lanczos_Exp_Ut_Test {
     explicit SmallResidualOp(const double coupling, const unsigned int dtype = Type.Double)
         : LinOp("mv", 3, dtype, Device.cpu), coupling_(coupling) {}
 
-    UniTensor matvec(const UniTensor& A) override {
+    UniTensor matvec_impl(const UniTensor& A) override {
+      input_dtypes.push_back(A.dtype());
       auto out = UniTensor::zeros(A.shape(), A.labels(), A.dtype(), A.device());
       out.set_rowrank_(A.rowrank());
       out.at({0, 0}) = coupling_ * A.at({1, 0});
       out.at({1, 0}) = coupling_ * A.at({0, 0});
       return out;
     }
+
+    std::vector<unsigned int> input_dtypes;
 
    private:
     double coupling_;
@@ -76,7 +79,7 @@ namespace Lanczos_Exp_Ut_Test {
    public:
     TwoDimMixingOp() : LinOp("mv", 2, Type.Double, Device.cpu) {}
 
-    UniTensor matvec(const UniTensor& A) override {
+    UniTensor matvec_impl(const UniTensor& A) override {
       auto out = UniTensor::zeros(A.shape(), A.labels(), A.dtype(), A.device());
       out.set_rowrank_(A.rowrank());
       out.at({0, 0}) = A.at({1, 0});
@@ -277,6 +280,10 @@ namespace Lanczos_Exp_Ut_Test {
     auto err = static_cast<double>((x - ans).Norm().item().real());
 
     EXPECT_EQ(x.dtype(), Type.ComplexFloat);
+    ASSERT_FALSE(op.input_dtypes.empty());
+    for (const auto dtype : op.input_dtypes) {
+      EXPECT_EQ(dtype, Type.Float);
+    }
     EXPECT_LE(err, FloatLanczosExpTolerance());
   }
 

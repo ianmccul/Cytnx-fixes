@@ -9,9 +9,9 @@ using namespace testing;
 
 class MyOp : public LinOp {
  public:
-  MyOp() : LinOp("mv", 27) {}
+  MyOp() : LinOp("mv", 27, Type.Double) {}
 
-  UniTensor matvec(const UniTensor& v) override {
+  UniTensor matvec_impl(const UniTensor& v) override {
     Tensor tA = arange(27 * 27).reshape(27, 27).to(cytnx::Device.cuda);
     UniTensor A = UniTensor(tA).to(cytnx::Device.cuda);
     A = A + A.Transpose();
@@ -24,7 +24,7 @@ class MyOp : public LinOp {
 class MyOp2 : public LinOp {
  public:
   UniTensor H;
-  MyOp2(int dim) : LinOp("mv", dim) {
+  MyOp2(int dim) : LinOp("mv", dim, Type.Double) {
     Tensor A = Tensor::Load(CYTNX_TEST_DATA_DIR "/linalg/Lanczos_Gnd/lan_block_A.cytn");
     Tensor B = Tensor::Load(CYTNX_TEST_DATA_DIR "/linalg/Lanczos_Gnd/lan_block_B.cytn");
     Tensor C = Tensor::Load(CYTNX_TEST_DATA_DIR "/linalg/Lanczos_Gnd/lan_block_C.cytn");
@@ -39,7 +39,7 @@ class MyOp2 : public LinOp {
     // H.print_diagram();
     // H.print_blocks();
   }
-  UniTensor matvec(const UniTensor& psi) override {
+  UniTensor matvec_impl(const UniTensor& psi) override {
     auto out = H.contract(psi);
     out.relabel_({"b", "c"});
     return out;

@@ -27,7 +27,7 @@ namespace cytnx {
       int counter;
       Hxx_new(std::vector<UniTensor> functArgs, const std::vector<UniTensor> &ortho_mps,
               const double &weight, const cytnx_int64 &dtype, const cytnx_int64 &device)
-          : LinOp("mv", 0 /*doesn't matter for UniTensor as ipt*/, dtype, device) {
+          : LinOp("mv", EffectiveDim(functArgs), dtype, device) {
         UniTensor &L = functArgs[0];
         UniTensor &M1 = functArgs[1];
         UniTensor &M2 = functArgs[2];
@@ -43,7 +43,7 @@ namespace cytnx {
         this->counter = 0;
       }
 
-      UniTensor matvec(const UniTensor &v) override {
+      UniTensor matvec_impl(const UniTensor &v) override {
         auto lbls = v.labels();
 
         this->anet.PutUniTensor("psi", v);
@@ -58,6 +58,15 @@ namespace cytnx {
         out.relabel_(lbls);
 
         return out.contiguous();
+      }
+
+     private:
+      static cytnx_uint64 EffectiveDim(const std::vector<UniTensor> &functArgs) {
+        const UniTensor &L = functArgs[0];
+        const UniTensor &M1 = functArgs[1];
+        const UniTensor &M2 = functArgs[2];
+        const UniTensor &R = functArgs[3];
+        return L.shape()[1] * M1.shape()[2] * M2.shape()[2] * R.shape()[1];
       }
     };
 
@@ -91,7 +100,7 @@ namespace cytnx {
         this->counter = 0;
       }
 
-      Tensor matvec(const Tensor &v) override {
+      Tensor matvec_impl(const Tensor &v) override {
         auto v_ = v.clone();
 
         auto psi_u = UniTensor(v_, false, 0);  // ## share memory, no copy

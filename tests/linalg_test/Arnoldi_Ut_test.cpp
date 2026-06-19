@@ -20,9 +20,10 @@ namespace {
    public:
     UniTensor A, B;
     UniTensor T_init;
+    unsigned int dtype_;
     TMOp(const int& d, const int& D, const cytnx_uint64& nx,
          const unsigned int& dtype = Type.Double, const int& device = Device.cpu);
-    UniTensor matvec(const UniTensor& l) override {
+    UniTensor matvec_impl(const UniTensor& l) override {
       auto tmp = Contracts({A, l, B}, "", true);
       tmp.relabel_(l.labels()).set_rowrank(l.rowrank());
       return tmp;
@@ -45,7 +46,7 @@ namespace {
   };
   TMOp::TMOp(const int& d, const int& D, const cytnx_uint64& in_nx, const unsigned int& in_dtype,
              const int& in_device)
-      : LinOp("mv", in_nx, in_dtype, in_device) {
+      : LinOp("mv", in_nx, in_dtype, in_device), dtype_(in_dtype) {
     std::vector<Bond> bonds = {Bond(D), Bond(d), Bond(D)};
     A = UniTensor(bonds, {}, -1, in_dtype, in_device)
           .set_name("A")
@@ -59,7 +60,7 @@ namespace {
                .set_name("l")
                .relabel_({"al", "bl"})
                .set_rowrank(1);
-    if (Type.is_float(this->dtype())) {
+    if (Type.is_float(dtype_)) {
       double low = -1.0, high = 1.0;
       int seed = 0;
       A.uniform_(low, high, seed);
@@ -71,7 +72,7 @@ namespace {
   class MyOp2 : public LinOp {
    public:
     UniTensor H;
-    MyOp2(int dim) : LinOp("mv", dim) {
+    MyOp2(int dim) : LinOp("mv", dim, Type.Double) {
       Bond lan_I = Bond(BD_IN, {Qs(-1), Qs(0), Qs(1)}, {9, 9, 9});
       Bond lan_J = Bond(BD_OUT, {Qs(-1), Qs(0), Qs(1)}, {9, 9, 9});
       H = UniTensor({lan_I, lan_J});
@@ -82,7 +83,7 @@ namespace {
       // H.print_diagram();
       // H.print_blocks();
     }
-    UniTensor matvec(const UniTensor& psi) override {
+    UniTensor matvec_impl(const UniTensor& psi) override {
       auto out = (H.astype(psi.dtype())).contract(psi);
       out.relabel_({"b", "c"});
       return out;
@@ -138,7 +139,7 @@ namespace {
 
     // check the number of the eigenvalues
     cytnx_uint64 arnoldi_eigvals_len = arnoldi_eigvals.shape()[0];
-    auto dtype = H.dtype();
+    auto dtype = H.dtype_;
     const double tolerance = (dtype == Type.ComplexFloat || dtype == Type.Float) ? 1.0e-4 : 1.0e-12;
     if (arnoldi_eigvals_len != k) return false;
     for (cytnx_uint64 i = 0; i < k; ++i) {

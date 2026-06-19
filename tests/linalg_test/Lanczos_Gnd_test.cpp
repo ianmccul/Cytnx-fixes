@@ -39,7 +39,7 @@ namespace {
      * "po":physical out bond
      */
 
-    UniTensor matvec(const UniTensor& psi) override {
+    UniTensor matvec_impl(const UniTensor& psi) override {
       net_.PutUniTensor("psi", psi);
       return net_.Launch();
     }
@@ -82,9 +82,9 @@ namespace {
 
   class MyOp : public LinOp {
    public:
-    MyOp() : LinOp("mv", 27) {}
+    MyOp() : LinOp("mv", 27, Type.Double) {}
 
-    UniTensor matvec(const UniTensor& v) override {
+    UniTensor matvec_impl(const UniTensor& v) override {
       Tensor tA = arange(27 * 27).reshape(27, 27);
       UniTensor A = UniTensor(tA);
       // A = A + A.clone().permute({1, 0},-1,false);
@@ -96,7 +96,7 @@ namespace {
   class MyOp2 : public LinOp {
    public:
     UniTensor H;
-    MyOp2(int dim) : LinOp("mv", dim) {
+    MyOp2(int dim) : LinOp("mv", dim, Type.Double) {
       Tensor A = Tensor::Load(CYTNX_TEST_DATA_DIR "/linalg/Lanczos_Gnd/lan_block_A.cytn");
       Tensor B = Tensor::Load(CYTNX_TEST_DATA_DIR "/linalg/Lanczos_Gnd/lan_block_B.cytn");
       Tensor C = Tensor::Load(CYTNX_TEST_DATA_DIR "/linalg/Lanczos_Gnd/lan_block_C.cytn");
@@ -110,13 +110,37 @@ namespace {
       // H.print_diagram();
       // H.print_blocks();
     }
-    UniTensor matvec(const UniTensor& psi) override {
+    UniTensor matvec_impl(const UniTensor& psi) override {
       auto out = H.contract(psi);
       out.relabel_({"b", "c"});
       // out.print_diagram();
       return out;
     }
   };
+
+  class RecordingDiagonalOp : public LinOp {
+   public:
+    explicit RecordingDiagonalOp(const unsigned int dtype) : LinOp("mv", 2, dtype, Device.cpu) {}
+
+    UniTensor matvec_impl(const UniTensor& v) override {
+      input_dtypes.push_back(v.dtype());
+      auto out = UniTensor::zeros(v.shape(), v.labels(), v.dtype(), v.device());
+      out.set_rowrank_(v.rowrank());
+      out.at({0, 0}) = v.at({1, 0});
+      out.at({1, 0}) = v.at({0, 0});
+      return out;
+    }
+
+    std::vector<unsigned int> input_dtypes;
+  };
+
+  UniTensor TwoStateInitialVector(const unsigned int dtype) {
+    auto v = UniTensor::zeros({2, 1}, {}, dtype, Device.cpu).set_rowrank_(1);
+    v.at({0, 0}) = 0.6;
+    v.at({1, 0}) = 0.8;
+    return v;
+  }
+
   // the function to check the answer
   bool CheckResult(OneSiteOp& H, const std::vector<UniTensor>& lanczos_eigs,
                    const std::string& which, const cytnx_uint64 k);
@@ -340,7 +364,7 @@ TEST(Lanczos_Ut, err_crit_negative) {
 
 // 2-7, test nx not match
 TEST(Lanczos_Ut, nx_not_match) {
-  LinOp op = LinOp("mv", 30);
+  LinOp op = LinOp("mv", 30, Type.Double);
   double low = -1.0, high = 1.0;
   int D = 5, d = 2;
   UniTensor psi = UniTensor::uniform({D, d, D}, low, high);
@@ -447,6 +471,19 @@ TEST(Lanczos_Gnd, Bk_Lanczos_test) {
   auto err = (H.matvec(eigs[1]) - ev * eigs[1]).Norm().item();
   EXPECT_TRUE(err < 1e-12);
   // EXPECT_DOUBLE_EQ(ev, evans);
+}
+
+TEST(Lanczos_Gnd, FloatKrylovVectorsRemainFloatInUniTensorGnd) {
+  RecordingDiagonalOp op(Type.Float);
+  auto v = TwoStateInitialVector(Type.Float);
+
+  auto eigs = linalg::Lanczos_Gnd_Ut(&op, v, 1.0e-7, true, false, 4);
+
+  EXPECT_EQ(eigs[1].dtype(), Type.Float);
+  ASSERT_FALSE(op.input_dtypes.empty());
+  for (const auto dtype : op.input_dtypes) {
+    EXPECT_EQ(dtype, Type.Float);
+  }
 }
 
 /*=====test info=====

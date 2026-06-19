@@ -2889,8 +2889,7 @@ namespace cytnx {
     */
     std::vector<Tensor> Lanczos_Gnd(LinOp *Hop, const double &CvgCrit = 1.0e-14,
                                     const bool &is_V = true, const Tensor &Tin = Tensor(),
-                                    const bool &verbose = false,
-                                    const unsigned int &Maxiter = 100000);
+                                    const bool &verbose = false, const unsigned int &Maxiter = 100);
 
     // Lanczos:
     //===============================================
@@ -2915,7 +2914,7 @@ namespace cytnx {
     std::vector<UniTensor> Lanczos_Gnd_Ut(LinOp *Hop, const cytnx::UniTensor &Tin,
                                           const double &CvgCrit = 1.0e-14, const bool &is_V = true,
                                           const bool &verbose = false,
-                                          const unsigned int &Maxiter = 100000);
+                                          const unsigned int &Maxiter = 100);
 
     // Lanczos_Exp:
     //===============================================
@@ -2950,7 +2949,7 @@ namespace cytnx {
     wrong results without any warning.
     */
     UniTensor Lanczos_Exp(LinOp *Hop, const cytnx::UniTensor &v, const Scalar &tau,
-                          const double &CvgCrit = 1.0e-10, const unsigned int &Maxiter = 100000,
+                          const double &CvgCrit = 1.0e-10, const unsigned int &Maxiter = 100,
                           const bool &verbose = false);
 
     // Lstsq:

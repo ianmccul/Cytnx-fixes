@@ -202,7 +202,7 @@ class FermiAdaOp : public LinOp {
   UniTensor A;
   FermiAdaOp(const UniTensor &A_, const cytnx_uint64 &nx)
       : LinOp("mv", nx, A_.dtype(), A_.device()), A(A_) {}
-  UniTensor matvec(const UniTensor &psi) override { return ferm_ada_apply(A, psi); }
+  UniTensor matvec_impl(const UniTensor &psi) override { return ferm_ada_apply(A, psi); }
 };
 
 inline UniTensor make_clean_ket(const UniTensor &A) {

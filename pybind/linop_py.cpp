@@ -26,130 +26,35 @@ class PyLinOp : public LinOp {
   /* inherit constructor */
   using LinOp::LinOp;
 
-  Tensor matvec(const Tensor &Tin) override {
-    PYBIND11_OVERLOAD(Tensor, /* Return type */
-                      LinOp, /* Parent class */
-                      matvec, /* Name of function in C++ (must match Python name) */
-                      Tin /* Argument(s) */
+  Tensor matvec_impl(const Tensor &Tin) override {
+    PYBIND11_OVERLOAD_NAME(Tensor, /* Return type */
+                           LinOp, /* Parent class */
+                           "matvec", /* Name of function in Python */
+                           matvec_impl, /* Name of function in C++ */
+                           Tin /* Argument(s) */
     );
   }
-  UniTensor matvec(const UniTensor &Tin) override {
-    PYBIND11_OVERLOAD(UniTensor, /* Return type */
-                      LinOp, /* Parent class */
-                      matvec, /* Name of function in C++ (must match Python name) */
-                      Tin /* Argument(s) */
+  UniTensor matvec_impl(const UniTensor &Tin) override {
+    PYBIND11_OVERLOAD_NAME(UniTensor, /* Return type */
+                           LinOp, /* Parent class */
+                           "matvec", /* Name of function in Python */
+                           matvec_impl, /* Name of function in C++ */
+                           Tin /* Argument(s) */
     );
   }
 };
 
 void linop_binding(py::module &m) {
   py::class_<LinOp, PyLinOp>(m, "LinOp")
-    .def(py::init<const std::string &, const cytnx_uint64 &, const int &, const int &>(),
-         py::arg("type"), py::arg("nx"), py::arg("dtype") = (int)Type.Double,
-         py::arg("device") = (int)Device.cpu)
-    .def("set_elem", &LinOp::set_elem<cytnx_complex128>, py::arg("i"), py::arg("j"),
-         py::arg("elem"), py::arg("check_exists") = true)
-    .def("set_elem", &LinOp::set_elem<cytnx_complex64>, py::arg("i"), py::arg("j"), py::arg("elem"),
-         py::arg("check_exists") = true)
-    .def("set_elem", &LinOp::set_elem<cytnx_double>, py::arg("i"), py::arg("j"), py::arg("elem"),
-         py::arg("check_exists") = true)
-    .def("set_elem", &LinOp::set_elem<cytnx_float>, py::arg("i"), py::arg("j"), py::arg("elem"),
-         py::arg("check_exists") = true)
-    .def("set_elem", &LinOp::set_elem<cytnx_int64>, py::arg("i"), py::arg("j"), py::arg("elem"),
-         py::arg("check_exists") = true)
-    .def("set_elem", &LinOp::set_elem<cytnx_uint64>, py::arg("i"), py::arg("j"), py::arg("elem"),
-         py::arg("check_exists") = true)
-    .def("set_elem", &LinOp::set_elem<cytnx_int32>, py::arg("i"), py::arg("j"), py::arg("elem"),
-         py::arg("check_exists") = true)
-    .def("set_elem", &LinOp::set_elem<cytnx_uint32>, py::arg("i"), py::arg("j"), py::arg("elem"),
-         py::arg("check_exists") = true)
-    .def("set_elem", &LinOp::set_elem<cytnx_int16>, py::arg("i"), py::arg("j"), py::arg("elem"),
-         py::arg("check_exists") = true)
-    .def("set_elem", &LinOp::set_elem<cytnx_uint16>, py::arg("i"), py::arg("j"), py::arg("elem"),
-         py::arg("check_exists") = true)
-    .def("set_elem", &LinOp::set_elem<cytnx_bool>, py::arg("i"), py::arg("j"), py::arg("elem"),
-         py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<std::complex<double>> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_complex128>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<std::complex<float>> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_complex64>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<double> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_double>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<float> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_float>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<int64_t> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_int64>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<uint64_t> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_uint64>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<int32_t> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_int32>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<uint32_t> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_uint32>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<int16_t> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_int16>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<uint16_t> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_uint16>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-    .def(
-      "set_elem",
-      [](LinOp &self, const cytnx::cytnx_uint64 i, const cytnx::cytnx_uint64 j,
-         const py::numpy_scalar<bool> elem, const bool check_exists) {
-        self.set_elem(i, j, static_cast<cytnx::cytnx_bool>(elem), check_exists);
-      },
-      py::arg("i"), py::arg("j"), py::arg("elem"), py::arg("check_exists") = true)
-
-    //.def("__call__",[](cytnx::LinOp &self, const cytnx_uint64 &i, const cytnx_uint64 &j){
-    //        return Tensor(self(i,j));
-    //})
+    .def(py::init([](const std::string &type, const cytnx_uint64 &nx, py::object dtype,
+                     const int &device) {
+           cytnx_error_msg(dtype.is_none(), "[ERROR][LinOp] dtype must be supplied.%s", "\n");
+           unsigned int dtype_hint = dtype.cast<unsigned int>();
+           return new PyLinOp(type, nx, dtype_hint, device);
+         }),
+         py::arg("type"), py::arg("nx"), py::arg("dtype"), py::arg("device") = (int)Device.cpu)
+    .def("set_dtype", &LinOp::set_dtype)
+    .def("dtype", &LinOp::dtype)
     .def(
       "matvec", [](LinOp &self, const Tensor &Tin) -> Tensor { return self.matvec(Tin); },
       py::arg("Tin"))
@@ -157,9 +62,7 @@ void linop_binding(py::module &m) {
       "matvec", [](LinOp &self, const UniTensor &Tin) -> UniTensor { return self.matvec(Tin); },
       py::arg("Tin"))
     .def("set_device", &LinOp::set_device)
-    .def("set_dtype", &LinOp::set_dtype)
     .def("device", &LinOp::device)
-    .def("dtype", &LinOp::dtype)
     .def("nx", &LinOp::nx)
     .def(
       "__repr__",
