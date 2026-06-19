@@ -29,6 +29,7 @@ add_executable(
   utils/getNconParameter.cpp
   linalg_test/Det_test.cpp
   linalg_test/Directsum_test.cpp
+  linalg_test/Dtype_smoke_test.cpp
   linalg_test/Exp_test.cpp
   linalg_test/ExpH_test.cpp
   linalg_test/ExpM_test.cpp

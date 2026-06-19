@@ -449,11 +449,6 @@ namespace cytnx {
         return std::is_same_v<T, cytnx_complex128> || std::is_same_v<T, cytnx_complex64>;
       }
 
-      template <typename T>
-      bool scalar_is_complex_double() {
-        return std::is_same_v<T, cytnx_complex128>;
-      }
-
     }  // namespace
 
     template <typename T>
@@ -475,9 +470,7 @@ namespace cytnx {
       const bool output_double = Tin.dtype() != Type.Float && Tin.dtype() != Type.ComplexFloat;
 
       if (output_complex) {
-        if (output_double || scalar_is_complex_double<T>()) {
-          return expm_impl<cytnx_complex128>(Tin, a, b, Type.ComplexDouble);
-        }
+        if (output_double) return expm_impl<cytnx_complex128>(Tin, a, b, Type.ComplexDouble);
         return expm_impl<cytnx_complex64>(Tin, a, b, Type.ComplexFloat);
       }
       if (output_double) return expm_impl<cytnx_double>(Tin, a, b, Type.Double);

@@ -14,6 +14,22 @@
 using namespace std;
 namespace cytnx {
   namespace linalg {
+    namespace {
+
+      template <typename T>
+      bool scalar_is_complex() {
+        return std::is_same_v<T, cytnx_complex128> || std::is_same_v<T, cytnx_complex64>;
+      }
+
+      template <typename T>
+      unsigned int expH_output_dtype(const Tensor &Tin) {
+        const bool output_complex = Type.is_complex(Tin.dtype()) || scalar_is_complex<T>();
+        const bool output_double = Tin.dtype() != Type.Float && Tin.dtype() != Type.ComplexFloat;
+        if (output_complex) return output_double ? Type.ComplexDouble : Type.ComplexFloat;
+        return output_double ? Type.Double : Type.Float;
+      }
+
+    }  // namespace
 
     template <typename T>
     Tensor ExpH(const Tensor &Tin, const T &a, const T &b) {
@@ -25,11 +41,13 @@ namespace cytnx {
       cytnx_error_msg(Tin.shape()[0] != Tin.shape()[1],
                       "[ExpH] error, ExpH can only operator on square Tensor (#row = #col%s", "\n");
 
+      const unsigned int output_dtype = expH_output_dtype<T>(Tin);
       if (a == 0) {
         if (b == 0)
-          return cytnx::identity(Tin.shape()[0], Tin.dtype(), Tin.device());
+          return cytnx::identity(Tin.shape()[0], output_dtype, Tin.device());
         else
-          return cytnx::identity(Tin.shape()[0], Tin.dtype(), Tin.device()) * exp(b);
+          return (cytnx::identity(Tin.shape()[0], output_dtype, Tin.device()) * exp(b))
+            .astype(output_dtype);
       }
 
       vector<Tensor> su = cytnx::linalg::Eigh(Tin, true);
@@ -55,6 +73,7 @@ namespace cytnx {
       ut = cytnx::linalg::Matmul(s, ut);
       ut = cytnx::linalg::Matmul(u, ut);
 
+      if (ut.dtype() != output_dtype) ut = ut.astype(output_dtype);
       return ut;
     }
 
