@@ -1,6 +1,7 @@
 #ifndef CYTNX_CYTNX_ERROR_H_
 #define CYTNX_CYTNX_ERROR_H_
 
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -24,6 +25,66 @@
   #define __PRETTY_FUNCTION__ __FUNCTION__
 #endif
 
+#ifndef CYTNX_BUILD_HAS_DEBUG_SYMBOLS
+  #if defined(UNI_DEBUG) || !defined(NDEBUG)
+    #define CYTNX_BUILD_HAS_DEBUG_SYMBOLS 1
+  #else
+    #define CYTNX_BUILD_HAS_DEBUG_SYMBOLS 0
+  #endif
+#endif
+
+static inline bool cytnx_env_equals_ignore_case(const char *lhs, const char *rhs) {
+  while (*lhs != '\0' && *rhs != '\0') {
+    const unsigned char lhs_ch = static_cast<unsigned char>(*lhs);
+    const unsigned char rhs_ch = static_cast<unsigned char>(*rhs);
+    if (std::tolower(lhs_ch) != std::tolower(rhs_ch)) {
+      return false;
+    }
+    lhs++;
+    rhs++;
+  }
+  return *lhs == '\0' && *rhs == '\0';
+}
+
+static inline bool cytnx_env_flag_is_true(const char *value) {
+  return cytnx_env_equals_ignore_case(value, "1") || cytnx_env_equals_ignore_case(value, "true") ||
+         cytnx_env_equals_ignore_case(value, "on") || cytnx_env_equals_ignore_case(value, "yes");
+}
+
+static inline bool cytnx_env_flag_is_false(const char *value) {
+  return cytnx_env_equals_ignore_case(value, "0") || cytnx_env_equals_ignore_case(value, "false") ||
+         cytnx_env_equals_ignore_case(value, "off") || cytnx_env_equals_ignore_case(value, "no");
+}
+
+static inline bool cytnx_should_print_stacktrace() {
+  const char *env_value = std::getenv("CYTNX_SHOW_STACKTRACE");
+  if (env_value != nullptr && env_value[0] != '\0') {
+    if (cytnx_env_flag_is_true(env_value)) {
+      return true;
+    }
+    if (cytnx_env_flag_is_false(env_value)) {
+      return false;
+    }
+  }
+  return CYTNX_BUILD_HAS_DEBUG_SYMBOLS != 0;
+}
+
+static inline void cytnx_print_stacktrace() {
+#if CYTNX_HAS_EXECINFO
+  std::cerr << "Stack trace:" << std::endl;
+  void *array[10];
+  std::size_t size;
+  size = backtrace(array, 10);
+  char **strings = backtrace_symbols(array, size);
+  for (std::size_t i = 0; i < size; i++) {
+    std::cerr << strings[i] << std::endl;
+  }
+  free(strings);
+#else
+  std::cerr << "Stack trace is unavailable on this platform/compiler." << std::endl;
+#endif
+}
+
 #define cytnx_error_msg(is_true, format, ...)                                               \
   {                                                                                         \
     if (is_true)                                                                            \
@@ -43,19 +104,11 @@ static inline void error_msg(char const *const func, const char *const file, int
     va_end(args);
     // std::cerr << output_str << std::endl;
     std::cerr << output_str << std::endl;
-#if CYTNX_HAS_EXECINFO
-    std::cerr << "Stack trace:" << std::endl;
-    void *array[10];
-    std::size_t size;
-    size = backtrace(array, 10);
-    char **strings = backtrace_symbols(array, size);
-    for (std::size_t i = 0; i < size; i++) {
-      std::cerr << strings[i] << std::endl;
+    if (cytnx_should_print_stacktrace()) {
+      cytnx_print_stacktrace();
+    } else {
+      std::cerr << "No debug symbols found; no stack trace available." << std::endl;
     }
-    free(strings);
-#else
-    std::cerr << "Stack trace is unavailable on this platform/compiler." << std::endl;
-#endif
     throw std::logic_error(output_str);
   }
   // } catch (const char *output_msg) {
