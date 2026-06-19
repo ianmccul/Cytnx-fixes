@@ -205,6 +205,28 @@ TEST(Lanczos, smallest_dim) {
   ExcuteTest(which, mat_type, k, dim);
 }
 
+TEST(Lanczos, ArpackStatsAreRecorded) {
+  MatOp H(5, Type.Double);
+  linalg::clear_krylov_stats();
+
+  auto eigs = linalg::Lanczos(&H, H.T_init, "SA", cytnx_uint64(100), 0.0, cytnx_uint64(1));
+  ASSERT_EQ(eigs.size(), 2);
+
+  auto stats = linalg::last_krylov_stats();
+  EXPECT_EQ(stats.algorithm, "Lanczos");
+  EXPECT_TRUE(stats.converged);
+  EXPECT_EQ(stats.reason, "converged");
+  EXPECT_GT(stats.matvec_count, 0);
+  EXPECT_GT(stats.iterations, 0);
+  EXPECT_EQ(stats.maxiter_requested, 100);
+  EXPECT_EQ(stats.maxiter_used, 100);
+  EXPECT_EQ(stats.input_dtype, Type.Double);
+  EXPECT_EQ(stats.working_dtype, Type.Double);
+
+  auto total_stats = linalg::krylov_stats();
+  EXPECT_EQ(total_stats.matvec_count, stats.matvec_count);
+}
+
 // 1-11, test 'is_V' is false
 // 1-12, test 'v_bose' is true
 // 1-13, test converge criteria is large such that the iteration time may not reach 'k'
@@ -251,6 +273,23 @@ TEST(Lanczos, err_ncv_out_of_range) {
   err_task.ExcuteErrorTest();
   err_task.ncv = err_task.dim + 1;
   err_task.ExcuteErrorTest();
+}
+
+TEST(Lanczos, DisabledErStatsAreRecorded) {
+  MatOp H(5, Type.Double);
+  linalg::clear_krylov_stats();
+
+  EXPECT_THROW(
+    { linalg::Lanczos(&H, H.T_init, "ER", 1.0e-12, 20, cytnx_uint64(1), true, false, 4); },
+    std::runtime_error);
+
+  auto stats = linalg::last_krylov_stats();
+  EXPECT_EQ(stats.algorithm, "Lanczos_ER");
+  EXPECT_FALSE(stats.converged);
+  EXPECT_EQ(stats.reason, "disabled");
+  EXPECT_EQ(stats.matvec_count, 0);
+  EXPECT_EQ(stats.maxiter_requested, 20);
+  EXPECT_EQ(stats.krylov_dim, 4);
 }
 
 /*=====test info=====

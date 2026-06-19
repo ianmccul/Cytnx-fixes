@@ -21,10 +21,42 @@ using namespace cytnx;
 #ifdef BACKEND_TORCH
 #else
 
+namespace {
+
+  py::dict krylov_stats_to_dict(const cytnx::linalg::KrylovStats &stats) {
+    py::dict out;
+    out["algorithm"] = stats.algorithm;
+    out["converged"] = stats.converged;
+    out["reason"] = stats.reason;
+    out["matvec_count"] = stats.matvec_count;
+    out["iterations"] = stats.iterations;
+    out["krylov_dim"] = stats.krylov_dim;
+    out["maxiter_requested"] = stats.maxiter_requested;
+    out["maxiter_used"] = stats.maxiter_used;
+    out["cvgcrit_requested"] = stats.cvgcrit_requested;
+    out["cvgcrit_used"] = stats.cvgcrit_used;
+    out["final_error"] = stats.final_error;
+    out["final_beta"] = stats.final_beta;
+    out["breakdown_tol"] = stats.breakdown_tol;
+    out["input_dtype"] = stats.input_dtype;
+    out["input_dtype_name"] = cytnx::Type.getname(stats.input_dtype);
+    out["working_dtype"] = stats.working_dtype;
+    out["working_dtype_name"] = cytnx::Type.getname(stats.working_dtype);
+    return out;
+  }
+
+}  // namespace
+
 void linalg_binding(py::module &m) {
   // [Submodule linalg]
 
   pybind11::module m_linalg = m.def_submodule("linalg", "linear algebra related.");
+  m_linalg.def("last_krylov_stats",
+               []() { return krylov_stats_to_dict(cytnx::linalg::last_krylov_stats()); });
+  m_linalg.def("krylov_stats",
+               []() { return krylov_stats_to_dict(cytnx::linalg::krylov_stats()); });
+  m_linalg.def("clear_krylov_stats", []() { cytnx::linalg::clear_krylov_stats(); });
+
   m_linalg.def(
     "Rand_isometry",
     [](const Tensor &Tin, const cytnx_uint64 &keepdim, const cytnx_uint64 &power_iteration,

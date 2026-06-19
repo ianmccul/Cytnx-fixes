@@ -20,8 +20,20 @@ namespace cytnx {
       (void)CvgCrit;
       (void)is_row;
       (void)Tin;
-      (void)max_krydim;
       (void)verbose;
+
+      KrylovStats stats;
+      stats.algorithm = "Lanczos_ER";
+      stats.converged = false;
+      stats.reason = "disabled";
+      stats.maxiter_requested = maxiter;
+      stats.maxiter_used = maxiter;
+      stats.cvgcrit_requested = CvgCrit;
+      stats.cvgcrit_used = CvgCrit;
+      stats.krylov_dim = max_krydim;
+      stats.input_dtype = Tin.dtype();
+      stats.working_dtype = Tin.dtype();
+      set_last_krylov_stats(stats);
 
       throw std::runtime_error(
         "[ERROR][Lanczos_ER] The old explicitly restarted Lanczos implementation has been disabled "

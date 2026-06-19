@@ -223,6 +223,28 @@ TEST(Arnoldi, smallest_dim) {
   ExcuteTest(which, mat_type, k, dim);
 }
 
+TEST(Arnoldi, ArpackStatsAreRecorded) {
+  MatOp H(5, Type.ComplexDouble);
+  linalg::clear_krylov_stats();
+
+  auto eigs = linalg::Arnoldi(&H, H.T_init, "LM", cytnx_uint64(100), 0.0, cytnx_uint64(1));
+  ASSERT_EQ(eigs.size(), 2);
+
+  auto stats = linalg::last_krylov_stats();
+  EXPECT_EQ(stats.algorithm, "Arnoldi");
+  EXPECT_TRUE(stats.converged);
+  EXPECT_EQ(stats.reason, "converged");
+  EXPECT_GT(stats.matvec_count, 0);
+  EXPECT_GT(stats.iterations, 0);
+  EXPECT_EQ(stats.maxiter_requested, 100);
+  EXPECT_EQ(stats.maxiter_used, 100);
+  EXPECT_EQ(stats.input_dtype, Type.ComplexDouble);
+  EXPECT_EQ(stats.working_dtype, Type.ComplexDouble);
+
+  auto total_stats = linalg::krylov_stats();
+  EXPECT_EQ(total_stats.matvec_count, stats.matvec_count);
+}
+
 // 1-10, test 'is_V' is false
 TEST(Arnoldi, is_V_false) {
   int dim = 23;
