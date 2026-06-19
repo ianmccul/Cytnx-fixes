@@ -12,6 +12,7 @@ add_executable(
   test_main
   test_tools.cpp
   common_data_generator.cpp
+  cytnx_error_test.cpp
   Bond_test.cpp
   Network_test.cpp
   UniTensor_base_test.cpp

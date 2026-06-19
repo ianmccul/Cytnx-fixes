@@ -243,6 +243,11 @@ target_include_directories(cytnx
 )
 
 target_compile_definitions(cytnx PUBLIC _LIBCPP_DISABLE_AVAILABILITY)
+if(cmake_build_type_tolower STREQUAL "debug" OR cmake_build_type_tolower STREQUAL "relwithdebinfo")
+  target_compile_definitions(cytnx PUBLIC CYTNX_BUILD_HAS_DEBUG_SYMBOLS=1)
+else()
+  target_compile_definitions(cytnx PUBLIC CYTNX_BUILD_HAS_DEBUG_SYMBOLS=0)
+endif()
 target_include_directories(cytnx SYSTEM
   PUBLIC
   ${Boost_INCLUDE_DIRS}
