@@ -5,8 +5,9 @@
 #include "LinOp.hpp"
 
 #include <cfloat>
-#include <vector>
 #include <cmath>
+#include <stdexcept>
+#include <vector>
 #include "UniTensor.hpp"
 #include "utils/vec_print.hpp"
 #include "backend/arpack_wrapper.hpp"
@@ -148,47 +149,61 @@ namespace cytnx {
     }
 
     std::vector<Tensor> Lanczos(LinOp *Hop, const Tensor &Tin, const std::string method,
-                                const double &CvgCrit, const unsigned int &Maxiter,
-                                const cytnx_uint64 &k, const bool &is_V, const bool &is_row,
-                                const cytnx_uint32 &max_krydim, const bool &verbose) {
+                                double CvgCrit, unsigned int Maxiter, cytnx_uint64 k, bool is_V,
+                                bool is_row, cytnx_uint32 max_krydim, bool verbose) {
       if (method == "ER") {
         return Lanczos_ER(Hop, k, is_V, Maxiter, CvgCrit, is_row, Tin, max_krydim, verbose);
-        // return Lanczos(Hop, Tin, "SA", Maxiter, CvgCrit, k, is_V, verbose);
       } else if (method == "Gnd") {
         cytnx_error_msg(k > 1, "[ERROR][Lanczos] Only k = 1 is supported for 'Gnd' method.%s",
                         "\n");
         cytnx_warning_msg(
           max_krydim > 0,
-          "[WARNING][Lanczos] max_krydim > 0 while it is irrelevent when using 'Gnd' method.%s",
+          "[WARNING][Lanczos] max_krydim > 0 while it is irrelevant when using 'Gnd' method.%s",
           "\n");
         return Lanczos_Gnd(Hop, CvgCrit, is_V, Tin, verbose, Maxiter);
-        // return Lanczos(Hop, Tin, "SA", Maxiter, CvgCrit, 1, is_V, 0, verbose);
       } else {
         cytnx_error_msg(
-          true, "[ERROR][Lanczos] Invalid Lanczos method, should be either 'ER' or 'Gnd'.%s", "\n");
+          true,
+          "[ERROR][Lanczos] Invalid Lanczos method. The legacy method='ER' implementation has "
+          "been disabled. For general Hermitian eigenvalue problems, use the ARPACK-backed "
+          "Lanczos(..., which=\"SA\") entry point for the smallest algebraic eigenvalue, or choose "
+          "another ARPACK 'which' selector as needed. The method='Gnd' path is a non-restarted "
+          "Lanczos routine intended for specialized local ground-state solves where bounded "
+          "matvec count is more important than standalone eigensolver semantics.%s",
+          "\n");
         return std::vector<Tensor>();
       }
     }  // Lanczos
 
     std::vector<UniTensor> Lanczos(LinOp *Hop, const UniTensor &Tin, const std::string method,
-                                   const double &CvgCrit, const unsigned int &Maxiter,
-                                   const cytnx_uint64 &k, const bool &is_V, const bool &is_row,
-                                   const cytnx_uint32 &max_krydim, const bool &verbose) {
+                                   double CvgCrit, unsigned int Maxiter, cytnx_uint64 k, bool is_V,
+                                   bool is_row, cytnx_uint32 max_krydim, bool verbose) {
       if (method == "ER") {
-        cytnx_error_msg(
-          true, "[ERROR][Lanczos] Lanczos method 'ER' for UniTensor is under developing!.%s", "\n");
-        return std::vector<UniTensor>();
+        throw std::runtime_error(
+          "[ERROR][Lanczos] Lanczos method 'ER' has been disabled because the old implementation "
+          "is numerically incorrect. For general Hermitian eigenvalue problems, use the "
+          "ARPACK-backed Lanczos(..., which=\"SA\") entry point for the smallest algebraic "
+          "eigenvalue, or choose another ARPACK 'which' selector as needed. The method='Gnd' path "
+          "is a non-restarted Lanczos routine intended for specialized local ground-state solves "
+          "where bounded matvec count is more important than standalone eigensolver semantics.");
       } else if (method == "Gnd") {
         cytnx_error_msg(k > 1, "[ERROR][Lanczos] Only k = 1 is supported for 'Gnd' method.%s",
                         "\n");
         cytnx_warning_msg(
           max_krydim > 0,
-          "[WARNING][Lanczos] max_krydim > 0 while is irrelevent when using 'Gnd' method.%s", "\n");
+          "[WARNING][Lanczos] max_krydim > 0 while it is irrelevant when using 'Gnd' method.%s",
+          "\n");
         return Lanczos_Gnd_Ut(Hop, Tin, CvgCrit, is_V, verbose, Maxiter);
-        // return Lanczos(Hop, Tin, "SA", Maxiter, CvgCrit, 1, is_V, 0, verbose);
       } else {
         cytnx_error_msg(
-          true, "[ERROR][Lanczos] Invalid Lanczos method, should be either 'ER' or 'Gnd'.%s", "\n");
+          true,
+          "[ERROR][Lanczos] Invalid Lanczos method. The legacy method='ER' implementation has "
+          "been disabled. For general Hermitian eigenvalue problems, use the ARPACK-backed "
+          "Lanczos(..., which=\"SA\") entry point for the smallest algebraic eigenvalue, or choose "
+          "another ARPACK 'which' selector as needed. The method='Gnd' path is a non-restarted "
+          "Lanczos routine intended for specialized local ground-state solves where bounded "
+          "matvec count is more important than standalone eigensolver semantics.%s",
+          "\n");
         return std::vector<UniTensor>();
       }
     }  // Lanczos

@@ -4,12 +4,13 @@
 #include "Tensor.hpp"
 #include "LinOp.hpp"
 
-#include <cfloat>
-#include <vector>
+#include <algorithm>
+#include <cstdint>
 #include <cmath>
+#include <limits>
+#include <vector>
 #include "UniTensor.hpp"
 #include "utils/vec_print.hpp"
-#include <iomanip>
 
 #ifdef BACKEND_TORCH
 #else
@@ -20,12 +21,25 @@ namespace cytnx {
     using namespace std;
 
     namespace {
+      constexpr double kBetaBreakdownRoundoff = 100.0;
+
       unsigned int promoted_working_dtype_internal(const unsigned int input_dtype,
                                                    const unsigned int op_dtype) {
         if (op_dtype == Type.Void) {
           return input_dtype;
         }
         return Type.type_promote(input_dtype, op_dtype);
+      }
+
+      double dtype_epsilon_internal(const unsigned int dtype) {
+        if (dtype == Type.Float || dtype == Type.ComplexFloat) {
+          return std::numeric_limits<float>::epsilon();
+        }
+        return std::numeric_limits<double>::epsilon();
+      }
+
+      double float_cvgcrit_floor_internal() {
+        return kBetaBreakdownRoundoff * std::numeric_limits<float>::epsilon();
       }
 
       unsigned int hermitian_projection_dtype_internal(const unsigned int dtype) {
@@ -37,6 +51,27 @@ namespace cytnx {
           return Scalar(static_cast<cytnx_float>(value));
         }
         return Scalar(static_cast<cytnx_double>(value));
+      }
+
+      double scalar_abs_internal(const Scalar &s) { return static_cast<double>(s.abs()); }
+
+      unsigned int capped_nonrestarted_maxiter_internal(const unsigned int maxiter,
+                                                        const std::uint64_t vec_len) {
+        constexpr unsigned int kMaxNonrestartedMaxiter = 100;
+        const unsigned int finite_space_cap =
+          vec_len < maxiter ? static_cast<unsigned int>(vec_len) : maxiter;
+        static bool warning_issued = false;
+        if (finite_space_cap > kMaxNonrestartedMaxiter && !warning_issued) {
+          warning_issued = true;
+          cytnx_warning_msg(
+            true,
+            "[WARNING][Lanczos_Gnd] Non-restarted Lanczos would use %u Krylov steps after the "
+            "finite-space cap, which is unusually large. Capping Maxiter to %u. Use the "
+            "ARPACK-backed Lanczos(..., which=\"SA\") entry point for generic ground-state "
+            "eigensolver use.%s",
+            finite_space_cap, kMaxNonrestartedMaxiter, "\n");
+        }
+        return std::min(finite_space_cap, kMaxNonrestartedMaxiter);
       }
     }  // namespace
 
@@ -52,16 +87,19 @@ namespace cytnx {
     }
 
     void _Lanczos_Gnd_general_Ut(std::vector<UniTensor> &out, LinOp *Hop, const UniTensor &Tin,
-                                 const bool &is_V, const double &CvgCrit,
-                                 const unsigned int &Maxiter, const bool &verbose) {
+                                 bool is_V, double CvgCrit, unsigned int Maxiter, bool verbose) {
       out.clear();
       std::vector<UniTensor> psi_s;
-      //[require] Tin should be provided!
 
       // Frobenius norm is sign-flip independent, so it is the correct vector norm for fermionic
       // tensors too (and equals sqrt(<Tin|Tin>) for bosonic).
       const unsigned int input_dtype = Tin.dtype();
+      const double eps = dtype_epsilon_internal(input_dtype);
+      const std::uint64_t vec_len = Hop->nx();
+      const unsigned int imp_maxiter = capped_nonrestarted_maxiter_internal(Maxiter, vec_len);
       auto Norm = real_scalar_for_dtype_internal(double(Tin.Norm().item().real()), input_dtype);
+      cytnx_error_msg(double(Norm.real()) == 0.0,
+                      "[ERROR][Lanczos_Gnd] initial vector has zero norm.%s", "\n");
 
       UniTensor psi_1 = Tin / Norm;
       psi_1.contiguous_();
@@ -72,26 +110,19 @@ namespace cytnx {
         psi_s.push_back(psi_1);
       }
 
-      UniTensor psi_0;  // = cytnx::zeros({psi_1.shape()[0]},psi_1.dtype(),Tin.device());
+      UniTensor psi_0;
       UniTensor new_psi;
       bool cvg_fin = false;
 
-      // declare variables, A,B should be real if LinOp is hermitian!
       Tensor As = zeros({1}, hermitian_projection_dtype_internal(Tin.dtype()), Tin.device());
       Tensor Bs = As.clone();
       Scalar E;
 
-      // temporary:
       std::vector<Tensor> tmpEsVs;
 
-      // i=0
-      //-------------------------------------------------
       new_psi = Hop->matvec(psi_1);
       new_psi.apply_();  // resolve pending fermionic signflip; no-op for bosonic/dense
 
-      /*
-         checking if the output match input:
-      */
       cytnx_error_msg(new_psi.labels().size() != psi_1.labels().size(),
                       "[ERROR] LinOp.matvec(UniTensor) -> UniTensor the output should have same "
                       "labels and shape as input!%s",
@@ -106,41 +137,59 @@ namespace cytnx {
       new_psi -= alpha * psi_1;
       auto beta = real_scalar_for_dtype_internal(double(new_psi.Norm().item().real()), input_dtype);
       Bs(0) = beta;
-      psi_0 = psi_1;
-      new_psi /= beta;
-      psi_1 = new_psi;
-      if (is_V) {
-        psi_s.push_back(psi_1);
+
+      auto beta_breakdown_scale = std::max(scalar_abs_internal(alpha), 1.0);
+      auto beta_breakdown = kBetaBreakdownRoundoff * eps * beta_breakdown_scale;
+      try {
+        tmpEsVs = linalg::Tridiag(As, Bs, true, true, true);
+      } catch (std::logic_error le) {
+        std::cout << "[WARNING] Lanczos_Gnd -> Tridiag error: \n";
+        std::cout << le.what() << std::endl;
+        std::cout << "Lanczos stops automatically." << std::endl;
+        return;
       }
-      E = alpha;
+      if (scalar_abs_internal(beta) <= beta_breakdown || imp_maxiter == 1) {
+        cvg_fin = true;
+      } else {
+        psi_0 = psi_1;
+        new_psi /= beta;
+        psi_1 = new_psi;
+        if (is_V) {
+          psi_s.push_back(psi_1);
+        }
+      }
+      E = tmpEsVs[0].storage().at(0);
       Scalar Ediff;
 
       ///---------------------------
 
       // iteration LZ:
-      for (unsigned int i = 1; i < Maxiter; i++) {
+      for (unsigned int i = 1; !cvg_fin && i < imp_maxiter; i++) {
         new_psi = Hop->matvec(psi_1);
         new_psi.apply_();  // resolve pending fermionic signflip; no-op for bosonic/dense
         alpha = _Dot(new_psi, psi_1).real();
         As.append(alpha);
         new_psi -= (alpha * psi_1 + beta * psi_0);
 
-        // diagonalize
         try {
-          // diagonalize:
           auto tmptmp = linalg::Tridiag(As, Bs, true, true, true);
           tmpEsVs = tmptmp;
         } catch (std::logic_error le) {
           std::cout << "[WARNING] Lanczos_Gnd -> Tridiag error: \n";
           std::cout << le.what() << std::endl;
-          std::cout << "Lanczos continues automatically." << std::endl;
+          std::cout << "Lanczos stops automatically." << std::endl;
           break;
         }
 
         beta = real_scalar_for_dtype_internal(double(new_psi.Norm().item().real()), input_dtype);
         Bs.append(beta);
 
-        if (beta == 0) {
+        beta_breakdown_scale = std::max(
+          beta_breakdown_scale,
+          std::max(scalar_abs_internal(alpha) + scalar_abs_internal(Bs(i - 1).item()), 1.0));
+        beta_breakdown =
+          kBetaBreakdownRoundoff * eps * beta_breakdown_scale * std::sqrt(static_cast<double>(i));
+        if (scalar_abs_internal(beta) <= beta_breakdown) {
           cvg_fin = true;
           break;
         }
@@ -156,21 +205,15 @@ namespace cytnx {
                  double(Ediff));
         }
 
-        // chkf = true;
         if (Ediff < CvgCrit) {
           cvg_fin = true;
           break;
         }
+        if (i == imp_maxiter - 1) break;
         E = tmpEsVs[0].storage().at(0);
 
       }  // iteration
 
-      if (cvg_fin == false && verbose) {
-        cytnx_warning_msg(true,
-                          "[WARNING] iteration not converge after Maxiter!.\n :: Note :: ignore if "
-                          " this is intended %s",
-                          "\n");
-      }
       out.push_back(UniTensor(tmpEsVs[0](0), false, 0));
 
       if (is_V) {
@@ -187,11 +230,8 @@ namespace cytnx {
       }
     }
 
-    // Lanczos
-    std::vector<UniTensor> Lanczos_Gnd_Ut(LinOp *Hop, const UniTensor &Tin, const double &CvgCrit,
-                                          const bool &is_V, const bool &verbose,
-                                          const unsigned int &Maxiter) {
-      // check criteria and maxiter:
+    std::vector<UniTensor> Lanczos_Gnd_Ut(LinOp *Hop, const UniTensor &Tin, double CvgCrit,
+                                          bool is_V, bool verbose, unsigned int Maxiter) {
       cytnx_error_msg(CvgCrit <= 0, "[ERROR][Lanczos] converge criteria must >0%s", "\n");
       cytnx_error_msg(Maxiter < 2, "[ERROR][Lanczos] Maxiter must >1%s", "\n");
 
@@ -207,12 +247,14 @@ namespace cytnx {
       double _cvgcrit = CvgCrit;
 
       if (v0.dtype() == Type.Float || v0.dtype() == Type.ComplexFloat) {
-        if (_cvgcrit < 1.0e-7) {
-          _cvgcrit = 1.0e-7;
-          cytnx_warning_msg(_cvgcrit < 1.0e-7,
-                            "[WARNING][CvgCrit] for float precision type, CvgCrit cannot exceed "
-                            "it's own type precision limit 1e-7, and it's auto capped to 1.0e-7.%s",
-                            "\n");
+        const double cvgcrit_floor = float_cvgcrit_floor_internal();
+        if (_cvgcrit < cvgcrit_floor) {
+          _cvgcrit = cvgcrit_floor;
+          cytnx_warning_msg(
+            true,
+            "[WARNING][Lanczos_Gnd] for float precision type, CvgCrit cannot be smaller "
+            "than %.8e, and is automatically raised to this value.%s",
+            cvgcrit_floor, "\n");
         }
       }
 

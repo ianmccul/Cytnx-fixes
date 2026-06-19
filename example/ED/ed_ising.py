@@ -36,4 +36,4 @@ if __name__ == '__main__':
     Hx = 0.3
     H = Hising(L,J,Hx)
     v = cy.ones(16)
-    print(cy.linalg.Lanczos(Hop = H, Tin = v, method = "ER", max_krydim = 2))
+    print(cy.linalg.Lanczos(Hop = H, Tin = v, which = "SA"))

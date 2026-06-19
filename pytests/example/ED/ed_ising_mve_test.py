@@ -9,7 +9,6 @@ def test_ed_ising_mve():
     J = 1
     Hx = 0.3
     H = Hising(L,J,Hx)
-    H.pre_construct()
     v = cy.ones(16)
-    res = cy.linalg.Lanczos(Hop = H, Tin = v, method = "ER", max_krydim = 2)
+    res = cy.linalg.Lanczos(Hop = H, Tin = v, which = "SA")
     assert np.abs(res[0].item()-(-4.092961599426854)) < 1e-4
