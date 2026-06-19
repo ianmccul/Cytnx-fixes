@@ -1,6 +1,7 @@
 #include <vector>
 #include <map>
 #include <random>
+#include <stdexcept>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -50,6 +51,135 @@ void scalar_binding(py::module &m);
 void ncon_binding(py::module &m);
 #endif
 
+namespace {
+
+  Type_class::Type dtype_enum(unsigned int type_id) {
+    return static_cast<Type_class::Type>(type_id);
+  }
+
+  Type_class::Type as_complex_dtype(unsigned int type_id) {
+    switch (type_id) {
+      case Type.ComplexDouble:
+      case Type.Double:
+      case Type.Int64:
+      case Type.Uint64:
+      case Type.Int32:
+      case Type.Uint32:
+      case Type.Int16:
+      case Type.Uint16:
+      case Type.Bool:
+        return dtype_enum(Type.ComplexDouble);
+      case Type.ComplexFloat:
+      case Type.Float:
+        return dtype_enum(Type.ComplexFloat);
+      default:
+        throw std::logic_error(std::string("Cannot convert ") + Type.enum_name(type_id) +
+                               " to a complex dtype.");
+    }
+  }
+
+  Type_class::Type as_real_dtype(unsigned int type_id) {
+    switch (type_id) {
+      case Type.ComplexDouble:
+        return dtype_enum(Type.Double);
+      case Type.ComplexFloat:
+        return dtype_enum(Type.Float);
+      case Type.Double:
+      case Type.Float:
+      case Type.Int64:
+      case Type.Uint64:
+      case Type.Int32:
+      case Type.Uint32:
+      case Type.Int16:
+      case Type.Uint16:
+      case Type.Bool:
+        return dtype_enum(type_id);
+      default:
+        throw std::logic_error(std::string("Cannot convert ") + Type.enum_name(type_id) +
+                               " to a real dtype.");
+    }
+  }
+
+  Type_class::Type as_single_prec_dtype(unsigned int type_id) {
+    switch (type_id) {
+      case Type.ComplexDouble:
+      case Type.ComplexFloat:
+        return dtype_enum(Type.ComplexFloat);
+      case Type.Double:
+      case Type.Float:
+      case Type.Int64:
+      case Type.Uint64:
+      case Type.Int32:
+      case Type.Uint32:
+      case Type.Int16:
+      case Type.Uint16:
+      case Type.Bool:
+        return dtype_enum(Type.Float);
+      default:
+        throw std::logic_error(std::string("Cannot convert ") + Type.enum_name(type_id) +
+                               " to a single-precision dtype.");
+    }
+  }
+
+  Type_class::Type as_double_prec_dtype(unsigned int type_id) {
+    switch (type_id) {
+      case Type.ComplexDouble:
+      case Type.ComplexFloat:
+        return dtype_enum(Type.ComplexDouble);
+      case Type.Double:
+      case Type.Float:
+      case Type.Int64:
+      case Type.Uint64:
+      case Type.Int32:
+      case Type.Uint32:
+      case Type.Int16:
+      case Type.Uint16:
+      case Type.Bool:
+        return dtype_enum(Type.Double);
+      default:
+        throw std::logic_error(std::string("Cannot convert ") + Type.enum_name(type_id) +
+                               " to a double-precision dtype.");
+    }
+  }
+
+  Type_class::Type as_signed_dtype(unsigned int type_id) {
+    switch (type_id) {
+      case Type.Int64:
+      case Type.Int32:
+      case Type.Int16:
+        return dtype_enum(type_id);
+      case Type.Uint64:
+        return dtype_enum(Type.Int64);
+      case Type.Uint32:
+        return dtype_enum(Type.Int32);
+      case Type.Uint16:
+        return dtype_enum(Type.Int16);
+      default:
+        throw std::logic_error(std::string("Cannot convert ") + Type.enum_name(type_id) +
+                               " to a signed integer dtype.");
+    }
+  }
+
+  Type_class::Type as_unsigned_dtype(unsigned int type_id) {
+    switch (type_id) {
+      case Type.Uint64:
+      case Type.Uint32:
+      case Type.Uint16:
+        return dtype_enum(type_id);
+      case Type.Int64:
+        return dtype_enum(Type.Uint64);
+      case Type.Int32:
+        return dtype_enum(Type.Uint32);
+      case Type.Int16:
+        return dtype_enum(Type.Uint16);
+      default:
+        throw std::logic_error(std::string("Cannot convert ") + Type.enum_name(type_id) +
+                               " to an unsigned integer dtype.");
+    }
+  }
+
+}  // namespace
+
 PYBIND11_MODULE(cytnx, m) {
   m.attr("__version__") = CYTNX_VERSION;
   m.attr("__blasINTsize__") = cytnx::__blasINTsize__;
@@ -64,13 +194,25 @@ PYBIND11_MODULE(cytnx, m) {
     type_enum.value(Type.enum_name(i), static_cast<Type_class::Type>(i));
   }
   type_enum
-    .def_static("is_complex",
-                [](const unsigned int &type_id) { return cytnx::Type.is_complex(type_id); })
-    .def_static("is_float",
-                [](const unsigned int &type_id) { return cytnx::Type.is_float(type_id); })
-    .def_static("is_int", [](const unsigned int &type_id) { return cytnx::Type.is_int(type_id); })
+    .def_static("is_complex", [](unsigned int type_id) { return cytnx::Type.is_complex(type_id); })
+    .def_static("is_floating", [](unsigned int type_id) { return cytnx::Type.is_float(type_id); })
+    .def_static("is_real",
+                [](unsigned int type_id) {
+                  return cytnx::Type.is_float(type_id) && !cytnx::Type.is_complex(type_id);
+                })
+    .def_static("is_integer", [](unsigned int type_id) { return cytnx::Type.is_int(type_id); })
+    .def_static("is_signed",
+                [](unsigned int type_id) {
+                  return cytnx::Type.is_int(type_id) && !cytnx::Type.is_unsigned(type_id);
+                })
     .def_static("is_unsigned",
-                [](const unsigned int &type_id) { return cytnx::Type.is_unsigned(type_id); })
+                [](unsigned int type_id) { return cytnx::Type.is_unsigned(type_id); })
+    .def_static("as_complex", &as_complex_dtype)
+    .def_static("as_real", &as_real_dtype)
+    .def_static("as_single_prec", &as_single_prec_dtype)
+    .def_static("as_double_prec", &as_double_prec_dtype)
+    .def_static("as_signed", &as_signed_dtype)
+    .def_static("as_unsigned", &as_unsigned_dtype)
     .def_static("type_promote",
                 [](const unsigned int &typeL, const unsigned int &typeR) {
                   return static_cast<Type_class::Type>(cytnx::Type.type_promote(typeL, typeR));
