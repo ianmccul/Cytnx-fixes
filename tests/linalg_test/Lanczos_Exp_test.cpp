@@ -287,6 +287,22 @@ namespace Lanczos_Exp_Ut_Test {
     EXPECT_LE(err, FloatLanczosExpTolerance());
   }
 
+  TEST(Lanczos_Exp_Ut, WarnsWhenInputPrecisionExceedsLinOpHint) {
+    const double coupling = 5.0e-5;
+    SmallResidualOp op(coupling, Type.Float);
+    auto Tin = SmallResidualInitialState(Type.Double);
+    const double tau = 1.0;
+    const unsigned int maxiter = 3;
+
+    testing::internal::CaptureStderr();
+    auto x = linalg::Lanczos_Exp(&op, Tin, tau, 1.0e-10, maxiter);
+    const std::string stderr_output = testing::internal::GetCapturedStderr();
+
+    EXPECT_NE(stderr_output.find("input tensor dtype Double"), std::string::npos) << stderr_output;
+    EXPECT_NE(stderr_output.find("LinOp dtype hint Float"), std::string::npos) << stderr_output;
+    EXPECT_EQ(x.dtype(), Type.Double);
+  }
+
   // describe:test incorrect data type
   TEST(Lanczos_Exp_Ut, IncorrectDType) {
     int d = 2, D = 10;
