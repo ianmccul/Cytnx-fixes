@@ -23,7 +23,7 @@ namespace {
     UniTensor T_init;
     TMOp(const int& d, const int& D, const cytnx_uint64& nx, const unsigned int& dtype,
          const int& device);
-    UniTensor matvec(const UniTensor& l) override {
+    UniTensor matvec_impl(const UniTensor& l) override {
       auto tmp = Contracts({A, l, B}, "", true);
       tmp.relabel_(l.labels()).set_rowrank(l.rowrank());
       return tmp;
@@ -63,7 +63,7 @@ namespace {
       B = op->B.to(Device.cpu);
       T_init = op->T_init.to(Device.cpu);
     }
-    UniTensor matvec(const UniTensor& l) override {
+    UniTensor matvec_impl(const UniTensor& l) override {
       auto tmp = Contracts({A, l, B}, "", true);
       tmp.relabel_(l.labels()).set_rowrank(l.rowrank());
       return tmp;

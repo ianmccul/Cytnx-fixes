@@ -7,60 +7,65 @@
 
 namespace cytnx {
 
+  namespace {
+
+    cytnx_uint64 tensor_numel(const Tensor &Tin) {
+      cytnx_uint64 numel = 1;
+      for (const auto dim : Tin.shape()) numel *= dim;
+      return numel;
+    }
+
+    cytnx_uint64 unitensor_numel(const UniTensor &Tin) {
+      if (Tin.uten_type() == UTenType.Dense) return tensor_numel(Tin.get_block_());
+      if (Tin.uten_type() == UTenType.Block || Tin.uten_type() == UTenType.BlockFermionic) {
+        cytnx_uint64 numel = 0;
+        for (const auto &block : Tin.get_blocks_()) numel += tensor_numel(block);
+        return numel;
+      }
+      return 0;
+    }
+
+  }  // namespace
+
   void LinOp::_print() {
-    if (this->_type == "mv_elem") {
-      std::cout << "elements :" << std::endl;
-      for (auto it = this->_elems.begin(); it != this->_elems.end(); it++) {
-        std::cout << "row:" << it->first << std::endl;
-        // Tensor e_i = it->second.second;
-        std::cout << "col idx:" << std::endl;
-        std::cout << it->second.first << std::endl;
-        std::cout << "elem:" << std::endl;
-        std::cout << it->second.second << std::endl;
-      }
-    }
-  }
-
-  Tensor LinOp::_mv_elemfunc(const Tensor &Tin) {
-    cytnx_error_msg(this->_type != "mv_elem",
-                    "[ERROR][LinOp][Internal] Fatal call _mv_elemfunc when type==mv %s", "\n");
-
-    Tensor out(Tin.shape(), Tin.dtype(), Tin.device());
-
-    // traversal all the rows:
-    for (auto it = this->_elems.begin(); it != this->_elems.end(); it++) {
-      Tensor e_i = it->second.second;
-      auto &v_i = it->second.first;
-      for (cytnx_uint64 j = 0; j < v_i.size(); j++) {
-        out(it->first) += e_i(j) * Tin(v_i[j]);
-      }
-    }
-    return out;
+    std::cout << "LinOp(type=" << this->_type << ", nx=" << this->_nx
+              << ", dtype_hint=" << Type.getname(this->_dtype) << ", device=" << this->_device
+              << ")" << std::endl;
   }
 
   Tensor LinOp::matvec(const Tensor &Tin) {
-    if (this->_type == "mv_elem") {
-      return this->_mv_elemfunc(Tin);
-      // cytnx_error_msg(true,"Developing%s","\n");
-      // return Tensor();
-    } else {
-      cytnx_error_msg(
-        true, "[ERROR][LinOp] LinOp with 'mv' type required overload matvec before using it.%s",
-        "\n");
-      return Tensor();
-    }
+    cytnx_error_msg(tensor_numel(Tin) != this->_nx,
+                    "[ERROR][LinOp] matvec input dimension %d does not match nx=%d\n",
+                    tensor_numel(Tin), this->_nx);
+    Tensor out = this->matvec_impl(Tin);
+    cytnx_error_msg(tensor_numel(out) != this->_nx,
+                    "[ERROR][LinOp] matvec output dimension %d does not match nx=%d\n",
+                    tensor_numel(out), this->_nx);
+    return out;
+  }
+
+  Tensor LinOp::matvec_impl(const Tensor &Tin) {
+    cytnx_error_msg(
+      true, "[ERROR][LinOp] LinOp with 'mv' type requires overriding matvec_impl before use.%s",
+      "\n");
+    return Tensor();
   }
 
   UniTensor LinOp::matvec(const UniTensor &Tin) {
-    if (this->_type == "mv_elem") {
-      cytnx_error_msg(
-        true, "[ERROR][LinOp] LinOp with 'mv_elem' type can only accept Tensor as matvec input!.%s",
-        "\n");
-    } else {
-      cytnx_error_msg(
-        true, "[ERROR][LinOp] LinOp with 'mv' type required overload matvec before using it.%s",
-        "\n");
-    }
+    cytnx_error_msg(unitensor_numel(Tin) != this->_nx,
+                    "[ERROR][LinOp] matvec input dimension %d does not match nx=%d\n",
+                    unitensor_numel(Tin), this->_nx);
+    UniTensor out = this->matvec_impl(Tin);
+    cytnx_error_msg(unitensor_numel(out) != this->_nx,
+                    "[ERROR][LinOp] matvec output dimension %d does not match nx=%d\n",
+                    unitensor_numel(out), this->_nx);
+    return out;
+  }
+
+  UniTensor LinOp::matvec_impl(const UniTensor &Tin) {
+    cytnx_error_msg(
+      true, "[ERROR][LinOp] LinOp with 'mv' type requires overriding matvec_impl before use.%s",
+      "\n");
     return UniTensor();
   }
 

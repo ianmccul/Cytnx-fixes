@@ -17,6 +17,19 @@ namespace cytnx {
     typedef Accessor ac;
     using namespace std;
 
+    namespace {
+      unsigned int promoted_working_dtype_internal(const unsigned int input_dtype,
+                                                   const unsigned int op_dtype) {
+        if (input_dtype == Type.Void) {
+          return op_dtype == Type.Void ? Type.Double : op_dtype;
+        }
+        if (op_dtype == Type.Void) {
+          return input_dtype;
+        }
+        return Type.type_promote(input_dtype, op_dtype);
+      }
+    }  // namespace
+
     void _Lanczos_Gnd_general(std::vector<Tensor> &out, LinOp *Hop, const Tensor &Tin,
                               const bool &is_V, const double &CvgCrit, const unsigned int &Maxiter,
                               const bool &verbose) {
@@ -30,10 +43,10 @@ namespace cytnx {
       bool cvg_fin = false;
 
       // declare variables:
-      Tensor As = zeros({1}, Hop->dtype(), Tin.device());
+      Tensor As = zeros({1}, Tin.dtype(), Tin.device());
       Tensor Bs = As.clone();
 
-      Scalar E = Scalar::maxval(Hop->dtype());
+      Scalar E = Scalar::maxval(Tin.dtype());
 
       // temporary:
       std::vector<Tensor> tmpEsVs;
@@ -368,12 +381,6 @@ namespace cytnx {
     std::vector<Tensor> Lanczos_Gnd(LinOp *Hop, const double &CvgCrit, const bool &is_V,
                                     const Tensor &Tin, const bool &verbose,
                                     const unsigned int &Maxiter) {
-      // check type:
-      cytnx_error_msg(
-        !Type.is_float(Hop->dtype()),
-        "[ERROR][Lanczos] Lanczos can only accept operator with floating types (complex/real)%s",
-        "\n");
-
       // check criteria and maxiter:
       cytnx_error_msg(CvgCrit <= 0, "[ERROR][Lanczos] converge criteria must >0%s", "\n");
       cytnx_error_msg(Maxiter < 2, "[ERROR][Lanczos] Maxiter must >1%s", "\n");
@@ -382,20 +389,25 @@ namespace cytnx {
       Tensor v0;
       if (Tin.dtype() == Type.Void) {
         v0 = cytnx::random::normal({Hop->nx()}, 0, 1, Hop->device())
-               .astype(Hop->dtype());  // randomly initialize.
+               .astype(promoted_working_dtype_internal(Type.Void, Hop->dtype()));
       } else {
         cytnx_error_msg(Tin.shape().size() != 1, "[ERROR][Lanczos] Tin should be rank-1%s", "\n");
         cytnx_error_msg(Tin.shape()[0] != Hop->nx(),
                         "[ERROR][Lanczos] Tin should have dimension consistent with Hop: [%d] %s",
                         Hop->nx(), "\n");
-        v0 = Tin.astype(Hop->dtype());
+        cytnx_error_msg(
+          !Type.is_float(Tin.dtype()),
+          "[ERROR][Lanczos] Lanczos can only accept input tensors with floating types "
+          "(complex/real)%s",
+          "\n");
+        v0 = Tin.astype(promoted_working_dtype_internal(Tin.dtype(), Hop->dtype()));
       }
 
       std::vector<Tensor> out;
 
       double _cvgcrit = CvgCrit;
 
-      if (Hop->dtype() == Type.Float || Hop->dtype() == Type.ComplexFloat) {
+      if (v0.dtype() == Type.Float || v0.dtype() == Type.ComplexFloat) {
         if (_cvgcrit < 1.0e-7) {
           _cvgcrit = 1.0e-7;
           cytnx_warning_msg(_cvgcrit < 1.0e-7,

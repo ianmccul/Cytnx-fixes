@@ -52,6 +52,18 @@ namespace cytnx {
       }
     }
 
+    static unsigned int promoted_working_dtype(const unsigned int input_dtype,
+                                               const unsigned int op_dtype,
+                                               const unsigned int default_dtype = Type.Double) {
+      if (input_dtype == Type.Void) {
+        return op_dtype == Type.Void ? default_dtype : op_dtype;
+      }
+      if (op_dtype == Type.Void) {
+        return input_dtype;
+      }
+      return Type.type_promote(input_dtype, op_dtype);
+    }
+
     template <typename T, typename T_ten>
     static void pass_data_UT(T_ten& UT, T* data_ptr, bool to_UT) {
       auto device = UT.device();
@@ -134,14 +146,27 @@ namespace cytnx {
 
     // T_ten: Tensor or UniTensor
     template <typename T, typename T_ten>
-    static void matvec(LinOp* Hop, T_ten& buffer, T* v_in, T* v_out) {
+    static void matvec(LinOp* Hop, T_ten& buffer, T* v_in, T* v_out, bool& dtype_warning_issued) {
       buffer.contiguous_();
       pass_data_UT<T, T_ten>(buffer, v_in, true);
       auto nextTens = Hop->matvec(buffer);
-      cytnx_error_msg(nextTens.dtype() != Hop->dtype(),
-                      "[ERROR][Arnoldi], the output dtype in the matvec is not "
-                      "consistent with the one in LinOp.%s",
-                      "\n");
+      if (nextTens.dtype() != buffer.dtype()) {
+        cytnx_error_msg(
+          Type.type_promote(nextTens.dtype(), buffer.dtype()) != buffer.dtype(),
+          "[ERROR][Arnoldi], matvec returned dtype %s, which cannot be safely represented in the "
+          "ARPACK workspace dtype %s. Use a wider input vector or LinOp dtype hint.%s",
+          Type.getname(nextTens.dtype()).c_str(), Type.getname(buffer.dtype()).c_str(), "\n");
+        if (!dtype_warning_issued) {
+          cytnx_warning_msg(
+            true,
+            "[WARNING][Arnoldi], matvec returned dtype %s while the ARPACK workspace dtype is %s. "
+            "Casting the output; the LinOp dtype hint may be wider than the actual operator "
+            "output.%s",
+            Type.getname(nextTens.dtype()).c_str(), Type.getname(buffer.dtype()).c_str(), "\n");
+          dtype_warning_issued = true;
+        }
+      }
+      nextTens = nextTens.astype(buffer.dtype());
       // Resolve any pending fermionic signflip so the raw block data copied out below corresponds
       // to all signflips applied; no-op for bosonic/dense tensors.
       if constexpr (std::is_same_v<T_ten, UniTensor>) nextTens.apply_();
@@ -228,7 +253,6 @@ namespace cytnx {
                          cytnx_int32* ldv, cytnx_int32* iparam, cytnx_int32* ipntr, T* workd,
                          T* workl, cytnx_int32* lworkl, T2* rwork, cytnx_int32* info)>
         func_xneupd;
-      auto dtype = Hop->dtype();
       if constexpr (std::is_same_v<T, cytnx_complex128>) {
         func_xnaupd = arpack::znaupd_;
         func_xneupd = arpack::zneupd_;
@@ -287,11 +311,12 @@ namespace cytnx {
       T sigma;
 
       /// start iteration
+      bool dtype_warning_issued = false;
       while (true) {
         func_xnaupd(&ido, &bmat, &dim, which, &nev, &tol, resid, &ncv, v, &ldv, iparam, ipntr,
                     workd, workl, &lworkl, rwork, &info);
         if (ido == -1 || ido == 1) {
-          matvec(Hop, buffer_UT, &workd[ipntr[0] - 1], &workd[ipntr[1] - 1]);
+          matvec(Hop, buffer_UT, &workd[ipntr[0] - 1], &workd[ipntr[1] - 1], dtype_warning_issued);
         } else if (ido == 99) {
           break;
         } else {
@@ -405,7 +430,6 @@ namespace cytnx {
         T* tol, T* resid, cytnx_int32* ncv, T* v, cytnx_int32* ldv, cytnx_int32* iparam,
         cytnx_int32* ipntr, T* workd, T* workl, cytnx_int32* lworkl, cytnx_int32* info)>
         func_xneupd;
-      auto dtype = Hop->dtype();
       if constexpr (std::is_same_v<T, cytnx_double>) {
         func_xnaupd = arpack::dnaupd_;
         func_xneupd = arpack::dneupd_;
@@ -463,11 +487,12 @@ namespace cytnx {
       T* di = new T[nev + 1];
 
       /// start iteration
+      bool dtype_warning_issued = false;
       while (true) {
         func_xnaupd(&ido, &bmat, &dim, which, &nev, &tol, resid, &ncv, v, &ldv, iparam, ipntr,
                     workd, workl, &lworkl, &info);
         if (ido == -1 || ido == 1) {
-          matvec(Hop, buffer_UT, &workd[ipntr[0] - 1], &workd[ipntr[1] - 1]);
+          matvec(Hop, buffer_UT, &workd[ipntr[0] - 1], &workd[ipntr[1] - 1], dtype_warning_issued);
         } else if (ido == 99) {
           break;
         } else {
@@ -629,7 +654,7 @@ namespace cytnx {
                   const std::string which, const cytnx_uint64& maxiter, const double& CvgCrit,
                   const cytnx_uint64& k, const bool& is_V, const cytnx_int32& ncv,
                   const bool& verbose) {
-      auto dtype = Hop->dtype();
+      auto dtype = UT_init.dtype();
       auto device = Hop->device();
       auto out_dtype = dtype;
       switch (dtype) {
@@ -681,7 +706,7 @@ namespace cytnx {
                   const std::string which, const cytnx_uint64& maxiter, const double& CvgCrit,
                   const cytnx_uint64& k, const bool& is_V, const cytnx_int32& ncv,
                   const bool& verbose) {
-      auto dtype = Hop->dtype();
+      auto dtype = UT_init.dtype();
       auto device = Hop->device();
       auto out_dtype = dtype;
       switch (dtype) {
@@ -731,12 +756,6 @@ namespace cytnx {
                                 const cytnx_uint64& maxiter, const double& cvg_crit,
                                 const cytnx_uint64& k, const bool& is_V, const int& ncv,
                                 const bool& verbose) {
-      // check type:
-      cytnx_error_msg(
-        !Type.is_float(Hop->dtype()),
-        "[ERROR][Arnoldi] Arnoldi can only accept operator with floating types (complex/real)%s",
-        "\n");
-
       // check which
       std::vector<std::string> accept_which = {"LM", "LR", "LI", "SR", "SI"};
       if (std::find(accept_which.begin(), accept_which.end(), which) == accept_which.end()) {
@@ -755,18 +774,17 @@ namespace cytnx {
       // check Tin should be rank-1:
       auto _T_init = T_init.clone();
       if (T_init.dtype() == Type.Void) {
-        _T_init =
-          cytnx::random::normal({Hop->nx()}, Hop->dtype(), Hop->device());  // randomly initialize.
+        _T_init = cytnx::random::normal({Hop->nx()}, 0, 1, Hop->device())
+                    .astype(promoted_working_dtype(Type.Void, Hop->dtype(), Type.Double));
       } else {
         cytnx_error_msg(T_init.shape().size() != 1, "[ERROR][Arnoldi] Tin should be rank-1%s",
                         "\n");
         cytnx_error_msg(T_init.shape()[0] != Hop->nx(),
                         "[ERROR][Arnoldi] Tin should have dimension consistent with Hop: [%d] %s",
                         Hop->nx(), "\n");
-        cytnx_error_msg(
-          T_init.dtype() != Hop->dtype(),
-          "[ERROR][Arnoldi] Tin should have same data type consistent with Hop: [%d] %s",
-          Hop->dtype(), "\n");
+        cytnx_error_msg(!Type.is_float(T_init.dtype()),
+                        "[ERROR][Arnoldi] Tin should have floating dtype.%s", "\n");
+        _T_init = _T_init.astype(promoted_working_dtype(_T_init.dtype(), Hop->dtype()));
       }
 
       cytnx_error_msg(cvg_crit < 0, "[ERROR][Arnoldi] cvg_crit should be >= 0%s", "\n");
@@ -784,12 +802,6 @@ namespace cytnx {
                                    const cytnx_uint64& maxiter, const double& cvg_crit,
                                    const cytnx_uint64& k, const bool& is_V, const int& ncv,
                                    const bool& verbose) {
-      // check type:
-      cytnx_error_msg(
-        !Type.is_float(Hop->dtype()),
-        "[ERROR][Arnoldi] Arnoldi can only accept operator with floating types (complex/real)%s",
-        "\n");
-
       // check which
       std::vector<std::string> accept_which = {"LM", "LR", "LI", "SR", "SI"};
       if (std::find(accept_which.begin(), accept_which.end(), which) == accept_which.end()) {
@@ -805,6 +817,7 @@ namespace cytnx {
                       "[ERROR][Arnoldi] k can only be up to total dimension of input vector D%s",
                       "\n");
 
+      auto _UT_init = UT_init;
       // check Tin should be rank-1:
       if (UT_init.dtype() == Type.Void) {
         cytnx_error_msg(k < 1, "[ERROR][Arnoldi] The initial UniTensor sould be defined.%s", "\n");
@@ -813,9 +826,9 @@ namespace cytnx {
         cytnx_error_msg(dim != Hop->nx(),
                         "[ERROR][Arnoldi] Tin should have dimension consistent with Hop: [%d] %s",
                         Hop->nx(), "\n");
-        cytnx_error_msg(UT_init.dtype() != Hop->dtype(),
-                        "[ERROR][Arnoldi] Tin should have datatype consistent with Hop: [%d] %s",
-                        Hop->dtype(), "\n");
+        cytnx_error_msg(!Type.is_float(UT_init.dtype()),
+                        "[ERROR][Arnoldi] Tin should have floating dtype.%s", "\n");
+        _UT_init = UT_init.astype(promoted_working_dtype(UT_init.dtype(), Hop->dtype()));
       }
 
       cytnx_error_msg(cvg_crit < 0, "[ERROR][Arnoldi] cvg_crit should be >= 0%s", "\n");
@@ -824,7 +837,7 @@ namespace cytnx {
                       "be 2+k<=ncv<=nx%s",
                       "\n");
       auto out = std::vector<UniTensor>();
-      _Arnoldi(out, Hop, UT_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose);
+      _Arnoldi(out, Hop, _UT_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose);
       return out;
     }
 
