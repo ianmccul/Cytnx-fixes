@@ -87,7 +87,8 @@ namespace cytnx {
     }
 
     void _Lanczos_Gnd_general_Ut(std::vector<UniTensor> &out, LinOp *Hop, const UniTensor &Tin,
-                                 bool is_V, double CvgCrit, unsigned int Maxiter, bool verbose) {
+                                 bool is_V, double CvgCrit, unsigned int Maxiter, bool verbose,
+                                 KrylovStats *stats) {
       out.clear();
       std::vector<UniTensor> psi_s;
 
@@ -97,6 +98,9 @@ namespace cytnx {
       const double eps = dtype_epsilon_internal(input_dtype);
       const std::uint64_t vec_len = Hop->nx();
       const unsigned int imp_maxiter = capped_nonrestarted_maxiter_internal(Maxiter, vec_len);
+      if (stats) {
+        stats->maxiter_used = imp_maxiter;
+      }
       auto Norm = real_scalar_for_dtype_internal(double(Tin.Norm().item().real()), input_dtype);
       cytnx_error_msg(double(Norm.real()) == 0.0,
                       "[ERROR][Lanczos_Gnd] initial vector has zero norm.%s", "\n");
@@ -121,6 +125,9 @@ namespace cytnx {
       std::vector<Tensor> tmpEsVs;
 
       new_psi = Hop->matvec(psi_1);
+      if (stats) {
+        stats->matvec_count++;
+      }
       new_psi.apply_();  // resolve pending fermionic signflip; no-op for bosonic/dense
 
       cytnx_error_msg(new_psi.labels().size() != psi_1.labels().size(),
@@ -146,10 +153,21 @@ namespace cytnx {
         std::cout << "[WARNING] Lanczos_Gnd -> Tridiag error: \n";
         std::cout << le.what() << std::endl;
         std::cout << "Lanczos stops automatically." << std::endl;
+        if (stats) {
+          stats->converged = false;
+          stats->reason = "tridiag_error";
+          stats->final_beta = scalar_abs_internal(beta);
+          stats->breakdown_tol = beta_breakdown;
+        }
         return;
       }
       if (scalar_abs_internal(beta) <= beta_breakdown || imp_maxiter == 1) {
         cvg_fin = true;
+        if (stats) {
+          stats->converged = true;
+          stats->reason =
+            scalar_abs_internal(beta) <= beta_breakdown ? "breakdown" : "full_krylov_dimension";
+        }
       } else {
         psi_0 = psi_1;
         new_psi /= beta;
@@ -166,6 +184,9 @@ namespace cytnx {
       // iteration LZ:
       for (unsigned int i = 1; !cvg_fin && i < imp_maxiter; i++) {
         new_psi = Hop->matvec(psi_1);
+        if (stats) {
+          stats->matvec_count++;
+        }
         new_psi.apply_();  // resolve pending fermionic signflip; no-op for bosonic/dense
         alpha = _Dot(new_psi, psi_1).real();
         As.append(alpha);
@@ -178,6 +199,10 @@ namespace cytnx {
           std::cout << "[WARNING] Lanczos_Gnd -> Tridiag error: \n";
           std::cout << le.what() << std::endl;
           std::cout << "Lanczos stops automatically." << std::endl;
+          if (stats) {
+            stats->converged = false;
+            stats->reason = "tridiag_error";
+          }
           break;
         }
 
@@ -189,8 +214,16 @@ namespace cytnx {
           std::max(scalar_abs_internal(alpha) + scalar_abs_internal(Bs(i - 1).item()), 1.0));
         beta_breakdown =
           kBetaBreakdownRoundoff * eps * beta_breakdown_scale * std::sqrt(static_cast<double>(i));
+        if (stats) {
+          stats->final_beta = scalar_abs_internal(beta);
+          stats->breakdown_tol = beta_breakdown;
+        }
         if (scalar_abs_internal(beta) <= beta_breakdown) {
           cvg_fin = true;
+          if (stats) {
+            stats->converged = true;
+            stats->reason = "breakdown";
+          }
           break;
         }
 
@@ -205,14 +238,34 @@ namespace cytnx {
                  double(Ediff));
         }
 
+        if (stats) {
+          stats->final_error = double(Ediff);
+        }
         if (Ediff < CvgCrit) {
           cvg_fin = true;
+          if (stats) {
+            stats->converged = true;
+            stats->reason = "energy_diff";
+          }
           break;
         }
-        if (i == imp_maxiter - 1) break;
+        if (i == imp_maxiter - 1) {
+          if (stats) {
+            stats->converged = false;
+            stats->reason = Maxiter < vec_len ? "maxiter" : "full_krylov_dimension";
+          }
+          break;
+        }
         E = tmpEsVs[0].storage().at(0);
 
       }  // iteration
+
+      if (stats) {
+        stats->iterations = tmpEsVs[0].shape()[0];
+        stats->krylov_dim = tmpEsVs[0].shape()[0];
+        stats->final_beta = scalar_abs_internal(beta);
+        stats->breakdown_tol = beta_breakdown;
+      }
 
       out.push_back(UniTensor(tmpEsVs[0](0), false, 0));
 
@@ -258,7 +311,16 @@ namespace cytnx {
         }
       }
 
-      _Lanczos_Gnd_general_Ut(out, Hop, v0, is_V, _cvgcrit, Maxiter, verbose);
+      KrylovStats stats;
+      stats.algorithm = "Lanczos_Gnd_Ut";
+      stats.maxiter_requested = Maxiter;
+      stats.cvgcrit_requested = CvgCrit;
+      stats.cvgcrit_used = _cvgcrit;
+      stats.input_dtype = Tin.dtype();
+      stats.working_dtype = v0.dtype();
+
+      _Lanczos_Gnd_general_Ut(out, Hop, v0, is_V, _cvgcrit, Maxiter, verbose, &stats);
+      set_last_krylov_stats(stats);
 
       return out;
 

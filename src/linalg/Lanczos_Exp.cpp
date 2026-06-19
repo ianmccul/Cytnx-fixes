@@ -346,12 +346,16 @@ namespace cytnx {
 
       void Lanczos_Exp_Ut_internal(UniTensor &out, LinOp *Hop, const UniTensor &T, Scalar tau,
                                    const unsigned int output_dtype, const double &CvgCrit,
-                                   const unsigned int &Maxiter, const bool &verbose) {
+                                   const unsigned int &Maxiter, const bool &verbose,
+                                   KrylovStats *stats) {
         const unsigned int input_dtype = T.dtype();
         const double eps = dtype_epsilon_internal(input_dtype);
         std::vector<UniTensor> vs;
         cytnx_uint32 vec_len = Hop->nx();
         cytnx_uint32 imp_maxiter = std::min(Maxiter, vec_len);
+        if (stats) {
+          stats->maxiter_used = imp_maxiter;
+        }
         Tensor Hp =
           zeros({imp_maxiter, imp_maxiter}, krylov_matrix_dtype_internal(input_dtype), T.device());
 
@@ -363,11 +367,21 @@ namespace cytnx {
 
         // first iteration
         auto wp = (Hop->matvec(v)).relabel_(v.labels());
+        if (stats) {
+          stats->matvec_count++;
+        }
         auto alpha = Dot_internal(wp, v);
         Hp.at({0, 0}) = alpha;
         auto w = (wp - alpha * v).relabel_(v.labels());
         double beta_prev = 0.0;
         double beta_breakdown_scale = std::max(scalar_abs_internal(alpha), 1.0);
+        if (stats && imp_maxiter == 1) {
+          const auto beta = std::sqrt(double(Dot_internal(w, w).real()));
+          stats->converged = true;
+          stats->reason = "full_krylov_dimension";
+          stats->final_beta = beta;
+          stats->breakdown_tol = kBetaBreakdownRoundoff * eps * beta_breakdown_scale;
+        }
 
         // prepare U
         auto Vk_shape = v.shape();
@@ -395,6 +409,12 @@ namespace cytnx {
             if (verbose) {
               std::cout << "beta too small. Break at iteration " << i << std::endl;
             }
+            if (stats) {
+              stats->converged = true;
+              stats->reason = "breakdown";
+              stats->final_beta = beta;
+              stats->breakdown_tol = beta_breakdown;
+            }
             break;
           }
           Vk.append(v.get_block_().contiguous());
@@ -402,6 +422,9 @@ namespace cytnx {
           Hp.at({(cytnx_uint64)i, (cytnx_uint64)i - 1}) =
             Hp.at({(cytnx_uint64)i - 1, (cytnx_uint64)i}) = beta;
           wp = (Hop->matvec(v)).relabel_(v.labels());
+          if (stats) {
+            stats->matvec_count++;
+          }
           alpha = Dot_internal(wp, v);
           Hp.at({(cytnx_uint64)i, (cytnx_uint64)i}) = alpha;
           w = (wp - alpha * v - real_scalar_for_dtype_internal(beta, input_dtype) * v_old)
@@ -413,7 +436,16 @@ namespace cytnx {
           B_mat = projected_exponential_internal(Hp_sub, tau);
           // Set the error as the element of bottom left of the exp(H_sub*tau)
           auto error = abs(B_mat.at({(cytnx_uint64)i, 0}));
+          if (stats) {
+            stats->final_error = double(error);
+            stats->final_beta = beta;
+            stats->breakdown_tol = beta_breakdown;
+          }
           if (error < CvgCrit) {
+            if (stats) {
+              stats->converged = true;
+              stats->reason = "projected_exponential";
+            }
             break;
           }
           if (i == imp_maxiter - 1) {
@@ -424,12 +456,20 @@ namespace cytnx {
                 "increasing maxiter.",
                 imp_maxiter);
             }
+            if (stats) {
+              stats->converged = Maxiter >= vec_len;
+              stats->reason = Maxiter < vec_len ? "maxiter" : "full_krylov_dimension";
+            }
             break;
           }
         }
         if (B_mat.dtype() == Type.Void) {
           Hp_sub = resize_mat_internal(Hp, Vs.size(), Vs.size());
           B_mat = projected_exponential_internal(Hp_sub, tau);
+        }
+        if (stats) {
+          stats->iterations = Vs.size();
+          stats->krylov_dim = Vs.size();
         }
 
         // Let V_k be the n × (k + 1) matrix whose columns are v[0],...,v[k] respectively.
@@ -530,7 +570,16 @@ namespace cytnx {
       }
 
       // Lanczos_Exp_Ut_internal_positive(out, Hop, v0, _cvgcrit, Maxiter, verbose);
-      Lanczos_Exp_Ut_internal(out, Hop, v0, tau, output_dtype, _cvgcrit, Maxiter, verbose);
+      KrylovStats stats;
+      stats.algorithm = "Lanczos_Exp";
+      stats.maxiter_requested = Maxiter;
+      stats.cvgcrit_requested = CvgCrit;
+      stats.cvgcrit_used = _cvgcrit;
+      stats.input_dtype = Tin.dtype();
+      stats.working_dtype = v0.dtype();
+
+      Lanczos_Exp_Ut_internal(out, Hop, v0, tau, output_dtype, _cvgcrit, Maxiter, verbose, &stats);
+      set_last_krylov_stats(stats);
 
       return out;
 

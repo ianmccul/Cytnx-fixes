@@ -490,6 +490,7 @@ TEST(Lanczos_Gnd, Bk_Lanczos_test) {
 TEST(Lanczos_Gnd, TensorOneDimensionalKrylovSpace) {
   OneDimTensorScaleOp op;
   auto v = ones(1, Type.Double);
+  linalg::clear_krylov_stats();
 
   auto eigs = linalg::Lanczos(&op, v, "Gnd", 1.0e-12, 10, 1, true);
 
@@ -497,12 +498,24 @@ TEST(Lanczos_Gnd, TensorOneDimensionalKrylovSpace) {
   EXPECT_NEAR(eigs[0].item<double>(), 3.0, 1.0e-12);
   auto residual = (op.matvec(eigs[1]) - 3.0 * eigs[1]).Norm().item<double>();
   EXPECT_LE(residual, 1.0e-12);
+
+  auto stats = linalg::last_krylov_stats();
+  EXPECT_EQ(stats.algorithm, "Lanczos_Gnd");
+  EXPECT_TRUE(stats.converged);
+  EXPECT_EQ(stats.reason, "breakdown");
+  EXPECT_EQ(stats.krylov_dim, 1);
+  EXPECT_EQ(stats.matvec_count, 1);
+  EXPECT_EQ(stats.maxiter_requested, 10);
+  auto total_stats = linalg::krylov_stats();
+  EXPECT_EQ(total_stats.matvec_count, stats.matvec_count);
+  EXPECT_EQ(total_stats.krylov_dim, stats.krylov_dim);
 }
 
 TEST(Lanczos_Gnd, UniTensorOneDimensionalKrylovSpace) {
   OneDimUniTensorScaleOp op;
   auto v = UniTensor::zeros({1, 1}, {}, Type.Double, Device.cpu).set_rowrank_(1);
   v.at({0, 0}) = 1.0;
+  linalg::clear_krylov_stats();
 
   auto eigs = linalg::Lanczos(&op, v, "Gnd", 1.0e-12, 10, 1, true);
 
@@ -510,6 +523,33 @@ TEST(Lanczos_Gnd, UniTensorOneDimensionalKrylovSpace) {
   EXPECT_NEAR(eigs[0].get_block_().item<double>(), 3.0, 1.0e-12);
   auto residual = (op.matvec(eigs[1]) - 3.0 * eigs[1]).Norm().item<double>();
   EXPECT_LE(residual, 1.0e-12);
+
+  auto stats = linalg::last_krylov_stats();
+  EXPECT_EQ(stats.algorithm, "Lanczos_Gnd_Ut");
+  EXPECT_TRUE(stats.converged);
+  EXPECT_EQ(stats.reason, "breakdown");
+  EXPECT_EQ(stats.krylov_dim, 1);
+  EXPECT_EQ(stats.matvec_count, 1);
+  EXPECT_EQ(stats.maxiter_requested, 10);
+}
+
+TEST(Lanczos_Ut, DisabledErStatsAreRecorded) {
+  OneDimUniTensorScaleOp op;
+  auto v = UniTensor::zeros({1, 1}, {}, Type.Double, Device.cpu).set_rowrank_(1);
+  v.at({0, 0}) = 1.0;
+  linalg::clear_krylov_stats();
+
+  EXPECT_THROW(
+    { linalg::Lanczos(&op, v, "ER", 1.0e-12, 20, cytnx_uint64(1), true, false, 4); },
+    std::runtime_error);
+
+  auto stats = linalg::last_krylov_stats();
+  EXPECT_EQ(stats.algorithm, "Lanczos_ER_Ut");
+  EXPECT_FALSE(stats.converged);
+  EXPECT_EQ(stats.reason, "disabled");
+  EXPECT_EQ(stats.matvec_count, 0);
+  EXPECT_EQ(stats.maxiter_requested, 20);
+  EXPECT_EQ(stats.krylov_dim, 4);
 }
 
 TEST(Lanczos_Gnd, FloatKrylovVectorsRemainFloatInUniTensorGnd) {

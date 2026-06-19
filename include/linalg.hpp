@@ -7,6 +7,7 @@
 #include "UniTensor.hpp"
 #include "cytnx_error.hpp"
 #include "random.hpp"
+#include <string>
 
 #ifdef BACKEND_TORCH
 #else
@@ -209,6 +210,28 @@ namespace cytnx {
   rowrank.
   */
   namespace linalg {
+    struct KrylovStats {
+      std::string algorithm;
+      bool converged = false;
+      std::string reason;
+      cytnx_uint64 matvec_count = 0;
+      cytnx_uint64 iterations = 0;
+      cytnx_uint64 krylov_dim = 0;
+      cytnx_uint64 maxiter_requested = 0;
+      cytnx_uint64 maxiter_used = 0;
+      double cvgcrit_requested = 0.0;
+      double cvgcrit_used = 0.0;
+      double final_error = 0.0;
+      double final_beta = 0.0;
+      double breakdown_tol = 0.0;
+      unsigned int input_dtype = Type.Void;
+      unsigned int working_dtype = Type.Void;
+    };
+
+    KrylovStats last_krylov_stats();
+    KrylovStats krylov_stats();
+    void set_last_krylov_stats(const KrylovStats &stats);
+    void clear_krylov_stats();
 
     // Add:
     //==================================================

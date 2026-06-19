@@ -72,6 +72,7 @@ target_sources(cytnx
     Lanczos_Exp.cpp
     Lanczos_Gnd.cpp
     Lanczos_Gnd_Ut.cpp
+    KrylovStats.cpp
     Lstsq.cpp
     #linalg_internal_interface.cpp
 )

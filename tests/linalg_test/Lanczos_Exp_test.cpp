@@ -183,12 +183,22 @@ namespace Lanczos_Exp_Ut_Test {
     Tin.at({0, 0}) = 2.0;
     const double crit = 1.0e-12;
     const double tau = 0.2;
+    linalg::clear_krylov_stats();
 
     auto x = linalg::Lanczos_Exp(&op, Tin, tau, crit);
     auto ans = Tin * std::exp(3.0 * tau);
     auto err = static_cast<double>((x - ans).Norm().item().real());
 
     EXPECT_LE(err, crit);
+    auto stats = linalg::last_krylov_stats();
+    EXPECT_EQ(stats.algorithm, "Lanczos_Exp");
+    EXPECT_TRUE(stats.converged);
+    EXPECT_EQ(stats.reason, "full_krylov_dimension");
+    EXPECT_EQ(stats.krylov_dim, 1);
+    EXPECT_EQ(stats.matvec_count, 1);
+    auto total_stats = linalg::krylov_stats();
+    EXPECT_EQ(total_stats.matvec_count, stats.matvec_count);
+    EXPECT_EQ(total_stats.krylov_dim, stats.krylov_dim);
   }
 
   TEST(Lanczos_Exp_Ut, FullKrylovSpaceDoesNotWarnAtDimensionLimit) {

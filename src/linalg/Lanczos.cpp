@@ -179,6 +179,18 @@ namespace cytnx {
                                    double CvgCrit, unsigned int Maxiter, cytnx_uint64 k, bool is_V,
                                    bool is_row, cytnx_uint32 max_krydim, bool verbose) {
       if (method == "ER") {
+        KrylovStats stats;
+        stats.algorithm = "Lanczos_ER_Ut";
+        stats.converged = false;
+        stats.reason = "disabled";
+        stats.maxiter_requested = Maxiter;
+        stats.maxiter_used = Maxiter;
+        stats.cvgcrit_requested = CvgCrit;
+        stats.cvgcrit_used = CvgCrit;
+        stats.krylov_dim = max_krydim;
+        stats.input_dtype = Tin.dtype();
+        stats.working_dtype = Tin.dtype();
+        set_last_krylov_stats(stats);
         throw std::runtime_error(
           "[ERROR][Lanczos] Lanczos method 'ER' has been disabled because the old implementation "
           "is numerically incorrect. For general Hermitian eigenvalue problems, use the "
@@ -295,7 +307,7 @@ namespace cytnx {
                            const std::string which_str, const cytnx_uint64 &maxiter,
                            const cytnx_double &CvgCrit, const cytnx_uint64 &k,
                            const cytnx_bool &is_V, const cytnx_int32 &ncv_in,
-                           const cytnx_bool &verbose) {
+                           const cytnx_bool &verbose, KrylovStats *stats) {
       std::function<void(cytnx_int32 * ido, char *bmat, cytnx_int32 *n, char *which,
                          cytnx_int32 *nev, T *tol, T *resid, cytnx_int32 *ncv, T *v,
                          cytnx_int32 *ldv, cytnx_int32 *iparam, cytnx_int32 *ipntr, T *workd,
@@ -363,14 +375,15 @@ namespace cytnx {
       T sigma;
 
       /// start iteration
-      int iter = 0;
       bool dtype_warning_issued = false;
       while (true) {
-        iter++;
         func_xsaupd(&ido, &bmat, &dim, which, &nev, &tol, resid, &ncv, v, &ldv, iparam, ipntr,
                     workd, workl, &lworkl, &info);
         if (ido == -1 || ido == 1) {
           matvec(Hop, buffer_UT, &workd[ipntr[0] - 1], &workd[ipntr[1] - 1], dtype_warning_issued);
+          if (stats) {
+            stats->matvec_count++;
+          }
         } else if (ido == 99) {
           break;
         } else {
@@ -396,6 +409,13 @@ namespace cytnx {
                         "the Implicitly Restarted Lanczos process\n ."
                         "d(s)saupd info = %d\n",
                         info);
+      }
+      if (stats) {
+        stats->converged = info == 0;
+        stats->reason = info == 0 ? "converged" : "maxiter";
+        stats->iterations = iparam[2];
+        stats->krylov_dim = ncv;
+        stats->maxiter_used = maxiter;
       }
       /// calculate eigenvalue and eigenvector by dseupd
       cytnx_int32 rvec = static_cast<cytnx_int32>(is_V);  /// 0: only eigenvalue, 1: also
@@ -445,7 +465,7 @@ namespace cytnx {
     void _Lanczos(std::vector<UniTensor> &out, LinOp *Hop, const UniTensor &UT_init,
                   const std::string which, const cytnx_uint64 &maxiter, const double &CvgCrit,
                   const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
-                  const bool &verbose) {
+                  const bool &verbose, KrylovStats *stats) {
       auto dtype = UT_init.dtype();
       auto device = Hop->device();
       auto eigvals_tens = zeros({k}, dtype, device);
@@ -462,11 +482,11 @@ namespace cytnx {
       switch (dtype) {
         case Type.Double:
           _Lanczos_internal<cytnx_double, UniTensor>(out, Hop, UT_init, which, maxiter, CvgCrit, k,
-                                                     is_V, ncv, verbose);
+                                                     is_V, ncv, verbose, stats);
           break;
         case Type.Float:
           _Lanczos_internal<cytnx_float, UniTensor>(out, Hop, UT_init, which, maxiter, CvgCrit, k,
-                                                    is_V, ncv, verbose);
+                                                    is_V, ncv, verbose, stats);
           break;
       }
     }
@@ -474,7 +494,7 @@ namespace cytnx {
     void _Lanczos(std::vector<Tensor> &out, LinOp *Hop, const Tensor &UT_init,
                   const std::string which, const cytnx_uint64 &maxiter, const double &CvgCrit,
                   const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
-                  const bool &verbose) {
+                  const bool &verbose, KrylovStats *stats) {
       auto dtype = UT_init.dtype();
       auto device = Hop->device();
       auto eigvals_tens = zeros({k}, dtype, device);
@@ -488,11 +508,11 @@ namespace cytnx {
       switch (dtype) {
         case Type.Double:
           _Lanczos_internal<cytnx_double, Tensor>(out, Hop, UT_init, which, maxiter, CvgCrit, k,
-                                                  is_V, ncv, verbose);
+                                                  is_V, ncv, verbose, stats);
           break;
         case Type.Float:
           _Lanczos_internal<cytnx_float, Tensor>(out, Hop, UT_init, which, maxiter, CvgCrit, k,
-                                                 is_V, ncv, verbose);
+                                                 is_V, ncv, verbose, stats);
           break;
       }
     }
@@ -545,7 +565,15 @@ namespace cytnx {
                       "\n");
       cytnx_uint64 output_size = is_V ? 2 : 1;
       auto out = std::vector<Tensor>(output_size, Tensor());
-      _Lanczos(out, Hop, _T_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose);
+      KrylovStats stats;
+      stats.algorithm = "Lanczos";
+      stats.maxiter_requested = maxiter;
+      stats.cvgcrit_requested = cvg_crit;
+      stats.cvgcrit_used = cvg_crit;
+      stats.input_dtype = T_init.dtype();
+      stats.working_dtype = _T_init.dtype();
+      _Lanczos(out, Hop, _T_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose, &stats);
+      set_last_krylov_stats(stats);
       return out;
     }
 
@@ -597,7 +625,15 @@ namespace cytnx {
                       "be 2+k<=ncv<=nx%s",
                       "\n");
       auto out = std::vector<UniTensor>();
-      _Lanczos(out, Hop, _UT_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose);
+      KrylovStats stats;
+      stats.algorithm = "Lanczos_Ut";
+      stats.maxiter_requested = maxiter;
+      stats.cvgcrit_requested = cvg_crit;
+      stats.cvgcrit_used = cvg_crit;
+      stats.input_dtype = UT_init.dtype();
+      stats.working_dtype = _UT_init.dtype();
+      _Lanczos(out, Hop, _UT_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose, &stats);
+      set_last_krylov_stats(stats);
       return out;
     }
 
