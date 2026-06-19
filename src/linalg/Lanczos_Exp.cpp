@@ -105,6 +105,28 @@ namespace cytnx {
         return promote_optional_dtype_internal(input_dtype, op_dtype);
       }
 
+      int floating_precision_rank_internal(const unsigned int dtype) {
+        if (dtype == Type.Float || dtype == Type.ComplexFloat) {
+          return 1;
+        }
+        if (dtype == Type.Double || dtype == Type.ComplexDouble) {
+          return 2;
+        }
+        return 0;
+      }
+
+      void warn_if_state_precision_exceeds_operator_hint_internal(const unsigned int input_dtype,
+                                                                  const unsigned int op_dtype) {
+        const auto input_precision = floating_precision_rank_internal(input_dtype);
+        const auto op_precision = floating_precision_rank_internal(op_dtype);
+        cytnx_warning_msg(
+          op_precision > 0 && input_precision > op_precision,
+          "[WARNING][Lanczos_Exp] input tensor dtype %s has higher precision than LinOp dtype "
+          "hint %s. The Krylov basis will use the promoted dtype, but the operator action may be "
+          "limited by the LinOp dtype hint.",
+          Type.getname(input_dtype).c_str(), Type.getname(op_dtype).c_str());
+      }
+
       unsigned int promoted_output_dtype_internal(const unsigned int input_dtype,
                                                   const unsigned int op_dtype,
                                                   const unsigned int tau_dtype) {
@@ -486,6 +508,7 @@ namespace cytnx {
       // makes the projected exponential and final output complex; it should not force a real
       // operator to accept complex Krylov vectors.
       UniTensor v0;
+      warn_if_state_precision_exceeds_operator_hint_internal(Tin.dtype(), Hop->dtype());
       v0 = Tin.astype(promoted_working_dtype_internal(Tin.dtype(), Hop->dtype()));
       const auto output_dtype =
         promoted_output_dtype_internal(Tin.dtype(), Hop->dtype(), tau.dtype());
