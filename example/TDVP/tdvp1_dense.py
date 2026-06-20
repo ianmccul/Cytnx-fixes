@@ -6,7 +6,9 @@ import cytnx
 Author: Hao-Ti Hung
 """
 
-def tdvp1_XXZmodel_dense(J, Jz, hx, hz, A, chi, dt, time_step):
+def tdvp1_XXZmodel_dense(J, Jz, hx, hz, A, chi, dt, time_step, svd_cutoff=1.0e-12):
+    # Remove numerically null Schmidt vectors. Keeping null-padded bond spaces
+    # makes the TDVP gauge updates depend on arbitrary SVD null-space bases.
 
     class OneSiteOp(cytnx.LinOp):
         def __init__(self, L, M, R):
@@ -170,7 +172,7 @@ def tdvp1_XXZmodel_dense(J, Jz, hx, hz, A, chi, dt, time_step):
             psi = time_evolve_Lan_f(psi, (LR[p],M,LR[p+1]), dt)
 
             psi.set_rowrank_(1) # maintain rowrank to perform the svd
-            s,_,A[p] = cytnx.linalg.Svd_truncate(psi,new_dim)
+            s,_,A[p] = cytnx.linalg.Svd_truncate(psi,new_dim,svd_cutoff)
             A[p].relabel_(lbls[p]) # set the label back to be consistent
             # update LR from right to left:
             anet = cytnx.Network()
@@ -211,7 +213,7 @@ def tdvp1_XXZmodel_dense(J, Jz, hx, hz, A, chi, dt, time_step):
             psi = time_evolve_Lan_f(psi, (LR[p],M,LR[p+1]), dt)
 
             psi.set_rowrank_(2) # maintain rowrank to perform the svd
-            s,A[p],_ = cytnx.linalg.Svd_truncate(psi,new_dim)
+            s,A[p],_ = cytnx.linalg.Svd_truncate(psi,new_dim,svd_cutoff)
             A[p].relabel_(lbls[p]) #set the label back to be consistent
             # update LR from left to right:
             anet = cytnx.Network()
