@@ -15,6 +15,38 @@ namespace {
     }
     return algo::Sort(all_svals);
   }
+
+  double DenseTensorNorm(const Tensor &tensor) { return tensor.Norm().item<double>(); }
+
+  Tensor MatrixAdjoint(const Tensor &matrix) { return matrix.Conj().permute({1, 0}).contiguous(); }
+
+  void ExpectMatrixNear(const Tensor &actual, const Tensor &expected, const double tol) {
+    ASSERT_EQ(actual.shape(), expected.shape());
+    EXPECT_LT(DenseTensorNorm(actual - expected), tol);
+  }
+
+  void ExpectQrReconstructs(const Tensor &matrix, const double tol) {
+    std::vector<Tensor> qr = linalg::Qr(matrix);
+    ASSERT_EQ(qr.size(), 2u);
+    Tensor Q = qr[0];
+    Tensor R = qr[1];
+    const cytnx_uint64 rows = matrix.shape()[0];
+    const cytnx_uint64 cols = matrix.shape()[1];
+    const cytnx_uint64 k = std::min(rows, cols);
+
+    ASSERT_EQ(Q.shape(), std::vector<cytnx_uint64>({rows, k}));
+    ASSERT_EQ(R.shape(), std::vector<cytnx_uint64>({k, cols}));
+
+    ExpectMatrixNear(linalg::Matmul(Q, R), matrix, tol);
+    ExpectMatrixNear(linalg::Matmul(MatrixAdjoint(Q), Q), eye(k, Q.dtype()), tol);
+
+    Tensor R_cd = R.astype(Type.ComplexDouble).contiguous();
+    for (cytnx_uint64 i = 0; i < R.shape()[0]; i++) {
+      for (cytnx_uint64 j = 0; j < std::min(i, R.shape()[1]); j++) {
+        EXPECT_NEAR(std::abs(R_cd.at<cytnx_complex128>({i, j})), 0.0, tol);
+      }
+    }
+  }
 }  // namespace
 
 TEST_F(linalg_Test, BkUt_Svd_truncate1) {
@@ -205,6 +237,54 @@ TEST_F(linalg_Test, BkUt_Qr1) {
         // EXPECT_EQ((double)(Q.at({i,j}).real()),(double)(Qr_Qans.at({i,j}).real()));
       }
     }
+}
+
+TEST(linalg_QrTensor, FactorizesTallRealMatrix) {
+  Tensor A = zeros({3, 2}, Type.Double);
+  A.at<double>({0, 0}) = 1.0;
+  A.at<double>({0, 1}) = 2.0;
+  A.at<double>({1, 0}) = 3.0;
+  A.at<double>({1, 1}) = 4.0;
+  A.at<double>({2, 0}) = 5.0;
+  A.at<double>({2, 1}) = 7.0;
+
+  ExpectQrReconstructs(A, 1e-12);
+}
+
+TEST(linalg_QrTensor, FactorizesWideRealMatrix) {
+  Tensor A = zeros({2, 3}, Type.Double);
+  A.at<double>({0, 0}) = 1.0;
+  A.at<double>({0, 1}) = 2.0;
+  A.at<double>({0, 2}) = 3.0;
+  A.at<double>({1, 0}) = 4.0;
+  A.at<double>({1, 1}) = 5.0;
+  A.at<double>({1, 2}) = 7.0;
+
+  ExpectQrReconstructs(A, 1e-12);
+}
+
+TEST(linalg_QrTensor, FactorizesTallComplexMatrix) {
+  Tensor A = zeros({3, 2}, Type.ComplexDouble);
+  A.at<cytnx_complex128>({0, 0}) = {1.0, 1.0};
+  A.at<cytnx_complex128>({0, 1}) = {2.0, -1.0};
+  A.at<cytnx_complex128>({1, 0}) = {3.0, 0.5};
+  A.at<cytnx_complex128>({1, 1}) = {-1.0, 0.0};
+  A.at<cytnx_complex128>({2, 0}) = {4.0, 2.0};
+  A.at<cytnx_complex128>({2, 1}) = {0.0, -3.0};
+
+  ExpectQrReconstructs(A, 1e-12);
+}
+
+TEST(linalg_QrTensor, FactorizesWideComplexMatrix) {
+  Tensor A = zeros({2, 3}, Type.ComplexDouble);
+  A.at<cytnx_complex128>({0, 0}) = {1.0, 1.0};
+  A.at<cytnx_complex128>({0, 1}) = {2.0, -1.0};
+  A.at<cytnx_complex128>({0, 2}) = {3.0, 0.5};
+  A.at<cytnx_complex128>({1, 0}) = {-1.0, 0.0};
+  A.at<cytnx_complex128>({1, 1}) = {4.0, 2.0};
+  A.at<cytnx_complex128>({1, 2}) = {0.0, -3.0};
+
+  ExpectQrReconstructs(A, 1e-12);
 }
 
 // Check if QR works when the first bond is BD_OUT.
