@@ -43,6 +43,8 @@ namespace {
     out["breakdown_tol"] = stats.breakdown_tol;
     out["input_dtype"] = stats.input_dtype;
     out["input_dtype_name"] = cytnx::Type.getname(stats.input_dtype);
+    out["op_dtype"] = stats.op_dtype;
+    out["op_dtype_name"] = cytnx::Type.getname(stats.op_dtype);
     out["working_dtype"] = stats.working_dtype;
     out["working_dtype_name"] = cytnx::Type.getname(stats.working_dtype);
     return out;

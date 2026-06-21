@@ -228,6 +228,7 @@ namespace cytnx {
       double final_beta = 0.0;
       double breakdown_tol = 0.0;
       unsigned int input_dtype = Type.Void;
+      unsigned int op_dtype = Type.Void;
       unsigned int working_dtype = Type.Void;
     };
 

@@ -280,6 +280,15 @@ def _valid_dtype_id(dtype):
     return dtype is not None and dtype != getattr(Type, "Void", None)
 
 
+def _dtype_is_complex(dtype):
+    if not _valid_dtype_id(dtype):
+        return False
+    try:
+        return bool(Type.is_complex(dtype))
+    except Exception:
+        return False
+
+
 def _krylov_diagnostic_label(stats, args, kwargs):
     method = _method_arg(args, kwargs)
     if isinstance(method, str):
@@ -308,13 +317,22 @@ def _user_stop_reason(reason):
 
 def _format_krylov_diagnostics(stats, args, kwargs, result):
     fields = [f"{_krylov_diagnostic_label(stats, args, kwargs)}:"]
-    _append_stat_field(fields, "E", _first_scalar_text(_eigenvalue_object(result)))
-    residual = stats.get("final_residual")
-    residual_tol = stats.get("residual_tol_used")
-    if residual is not None and residual_tol is not None:
-        fields.append(f"res={_format_float_like(residual)}/{_format_float_like(residual_tol)}")
+    algorithm = stats.get("algorithm")
+    if algorithm == "Lanczos_Exp":
+        final_error = stats.get("final_error")
+        cvgcrit = stats.get("cvgcrit_used")
+        if final_error is not None and cvgcrit is not None:
+            fields.append(f"err={_format_float_like(final_error)}/{_format_float_like(cvgcrit)}")
+        else:
+            _append_stat_field(fields, "err", final_error)
     else:
-        _append_stat_field(fields, "res", residual)
+        _append_stat_field(fields, "E", _first_scalar_text(_eigenvalue_object(result)))
+        residual = stats.get("final_residual")
+        residual_tol = stats.get("residual_tol_used")
+        if residual is not None and residual_tol is not None:
+            fields.append(f"res={_format_float_like(residual)}/{_format_float_like(residual_tol)}")
+        else:
+            _append_stat_field(fields, "res", residual)
     _append_stat_field(fields, "matvecs", stats.get("matvec_count"))
     _append_stat_field(fields, "k", stats.get("krylov_dim"))
     _append_stat_field(fields, "nx", _hop_nx(args, kwargs))
@@ -332,18 +350,43 @@ def _format_krylov_diagnostics(stats, args, kwargs, result):
 
 def _format_krylov_dtype_warnings(stats, result):
     warnings = []
+    algorithm = stats.get("algorithm")
     input_dtype = stats.get("input_dtype")
+    op_dtype = stats.get("op_dtype")
     working_dtype = stats.get("working_dtype")
-    output_dtype = _result_object_dtype_id(_output_vector_object(result))
+    output_dtype = None if algorithm == "Lanczos_Exp" else _result_object_dtype_id(
+        _output_vector_object(result)
+    )
     input_dtype_name = stats.get("input_dtype_name")
+    op_dtype_name = stats.get("op_dtype_name")
     working_dtype_name = stats.get("working_dtype_name")
     output_dtype_name = _dtype_name_from_id(output_dtype)
-    if _valid_dtype_id(input_dtype) and _valid_dtype_id(working_dtype) and working_dtype != input_dtype:
+    linop_complex_promoted_real_input = (
+        _valid_dtype_id(input_dtype)
+        and _valid_dtype_id(op_dtype)
+        and _valid_dtype_id(working_dtype)
+        and not _dtype_is_complex(input_dtype)
+        and _dtype_is_complex(op_dtype)
+        and _dtype_is_complex(working_dtype)
+    )
+    if linop_complex_promoted_real_input:
+        warnings.append(
+            f"[cytnx] WARNING: LinOp dtype hint {op_dtype_name} promoted real input dtype "
+            f"{input_dtype_name} to complex working dtype {working_dtype_name}. If this LinOp "
+            "represents a real operator, construct it with a real dtype hint to avoid unnecessary "
+            "complex arithmetic."
+        )
+    elif _valid_dtype_id(input_dtype) and _valid_dtype_id(working_dtype) and working_dtype != input_dtype:
         warnings.append(
             f"[cytnx] WARNING: Lanczos working dtype changed: {input_dtype_name} -> "
             f"{working_dtype_name}."
         )
-    if _valid_dtype_id(input_dtype) and _valid_dtype_id(output_dtype) and output_dtype != input_dtype:
+    if (
+        algorithm != "Lanczos_Exp"
+        and _valid_dtype_id(input_dtype)
+        and _valid_dtype_id(output_dtype)
+        and output_dtype != input_dtype
+    ):
         warnings.append(
             f"[cytnx] WARNING: Lanczos returned vector dtype {output_dtype_name} from input dtype "
             f"{input_dtype_name}."
@@ -387,6 +430,9 @@ def _print_krylov_diagnostics(args, kwargs, result):
 
 
 _native_Lanczos = getattr(_cytnx.linalg.Lanczos, "__cytnx_native_lanczos__", _cytnx.linalg.Lanczos)
+_native_Lanczos_Exp = getattr(
+    _cytnx.linalg.Lanczos_Exp, "__cytnx_native_lanczos_exp__", _cytnx.linalg.Lanczos_Exp
+)
 
 
 def Lanczos(*args, **kwargs):
@@ -422,6 +468,20 @@ def Lanczos(*args, **kwargs):
 
 Lanczos.__cytnx_native_lanczos__ = _native_Lanczos
 _cytnx.linalg.Lanczos = Lanczos
+
+
+def Lanczos_Exp(*args, **kwargs):
+    result = _native_Lanczos_Exp(*args, **kwargs)
+    if _krylov_diagnostics_enabled:
+        try:
+            _print_krylov_diagnostics(args, kwargs, result)
+        except Exception as exc:
+            warnings.warn(f"Failed to print Cytnx Krylov diagnostics: {exc}", RuntimeWarning)
+    return result
+
+
+Lanczos_Exp.__cytnx_native_lanczos_exp__ = _native_Lanczos_Exp
+_cytnx.linalg.Lanczos_Exp = Lanczos_Exp
 _cytnx.linalg.set_krylov_diagnostics = set_krylov_diagnostics
 _cytnx.linalg.get_krylov_diagnostics = get_krylov_diagnostics
 
