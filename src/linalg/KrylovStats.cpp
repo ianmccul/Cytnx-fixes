@@ -16,7 +16,12 @@ namespace cytnx {
         total_stats.krylov_dim += stats.krylov_dim;
         total_stats.maxiter_requested += stats.maxiter_requested;
         total_stats.maxiter_used += stats.maxiter_used;
+        total_stats.cvgcrit_requested = stats.cvgcrit_requested;
+        total_stats.cvgcrit_used = stats.cvgcrit_used;
+        total_stats.residual_tol_requested = stats.residual_tol_requested;
+        total_stats.residual_tol_used = stats.residual_tol_used;
         total_stats.final_error = stats.final_error;
+        total_stats.final_residual = stats.final_residual;
         total_stats.final_beta = stats.final_beta;
         total_stats.breakdown_tol = stats.breakdown_tol;
         total_stats.input_dtype = stats.input_dtype;

@@ -3,6 +3,7 @@
 #include "Tensor.hpp"
 #include "UniTensor.hpp"
 #include "algo.hpp"
+#include "DenseMatrix_internal.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -21,6 +22,7 @@ namespace cytnx {
   namespace linalg {
 
     namespace {
+      using internal::DenseMatrix;
 
       template <typename Scalar>
       struct is_complex_scalar : std::false_type {};
@@ -34,31 +36,6 @@ namespace cytnx {
       template <typename Scalar>
       using real_scalar_t = typename std::conditional_t<is_complex_scalar_v<Scalar>, Scalar,
                                                         std::complex<Scalar>>::value_type;
-
-      template <typename Scalar>
-      class DenseMatrix {
-       public:
-        DenseMatrix() = default;
-        DenseMatrix(const cytnx_uint64 rows, const cytnx_uint64 cols)
-            : rows_(rows), cols_(cols), data_(rows * cols) {}
-
-        cytnx_uint64 rows() const { return rows_; }
-        cytnx_uint64 cols() const { return cols_; }
-        cytnx_uint64 size() const { return data_.size(); }
-
-        Scalar &operator()(const cytnx_uint64 row, const cytnx_uint64 col) {
-          return data_[row * cols_ + col];
-        }
-
-        const Scalar &operator()(const cytnx_uint64 row, const cytnx_uint64 col) const {
-          return data_[row * cols_ + col];
-        }
-
-       private:
-        cytnx_uint64 rows_ = 0;
-        cytnx_uint64 cols_ = 0;
-        std::vector<Scalar> data_;
-      };
 
       template <typename Scalar>
       Scalar make_scalar(const cytnx_complex128 &value) {

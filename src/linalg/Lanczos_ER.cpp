@@ -30,6 +30,8 @@ namespace cytnx {
       stats.maxiter_used = maxiter;
       stats.cvgcrit_requested = CvgCrit;
       stats.cvgcrit_used = CvgCrit;
+      stats.residual_tol_requested = CvgCrit;
+      stats.residual_tol_used = CvgCrit;
       stats.krylov_dim = max_krydim;
       stats.input_dtype = Tin.dtype();
       stats.working_dtype = Tin.dtype();

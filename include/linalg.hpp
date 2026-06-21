@@ -221,7 +221,10 @@ namespace cytnx {
       cytnx_uint64 maxiter_used = 0;
       double cvgcrit_requested = 0.0;
       double cvgcrit_used = 0.0;
+      double residual_tol_requested = 0.0;
+      double residual_tol_used = 0.0;
       double final_error = 0.0;
+      double final_residual = 0.0;
       double final_beta = 0.0;
       double breakdown_tol = 0.0;
       unsigned int input_dtype = Type.Void;
@@ -2733,7 +2736,7 @@ namespace cytnx {
 
     @endparblock
 
-    @param[in] CvgCrit the convergence criterion of the energy.
+    @param[in] residual_tol desired Ritz residual tolerance for method="Gnd".
     @param[in] maxiter the maximum interation steps for each k.
     @param[in] k the number of lowest k eigen values.
     @param[in] is_V if set to true, the eigen vectors will be returned.
@@ -2747,7 +2750,7 @@ namespace cytnx {
   creating a class that inherits LinOp (see LinOp for further details).
     */
     std::vector<Tensor> Lanczos(LinOp *Hop, const Tensor &Tin = Tensor(),
-                                const std::string method = "Gnd", double CvgCrit = 1.0e-14,
+                                const std::string method = "Gnd", double residual_tol = 1.0e-14,
                                 unsigned int Maxiter = 20, cytnx_uint64 k = 1, bool is_V = true,
                                 bool is_row = false, cytnx_uint32 max_krydim = 0,
                                 bool verbose = false);
@@ -2872,7 +2875,7 @@ namespace cytnx {
 
     @endparblock
 
-    @param[in] CvgCrit the convergence criterion of the energy.
+    @param[in] residual_tol desired Ritz residual tolerance for method="Gnd".
     @param[in] maxiter the maximum interation steps for each k.
     @param[in] k the number of lowest k eigen values.
     @param[in] is_V if set to true, the eigen vectors will be returned.
@@ -2889,7 +2892,7 @@ namespace cytnx {
     incorrect.
     */
     std::vector<UniTensor> Lanczos(LinOp *Hop, const cytnx::UniTensor &Tin = UniTensor(),
-                                   const std::string method = "Gnd", double CvgCrit = 1.0e-14,
+                                   const std::string method = "Gnd", double residual_tol = 1.0e-14,
                                    unsigned int Maxiter = 20, cytnx_uint64 k = 1, bool is_V = true,
                                    bool is_row = false, cytnx_uint32 max_krydim = 0,
                                    bool verbose = false);
@@ -2907,7 +2910,7 @@ namespace cytnx {
     @param[in] k the number of lowest k eigen values.
     @param[in] is_V if set to true, the eigen vectors will be returned.
     @param[in] maxiter the maximum interation steps for each k.
-    @param[in] CvgCrit the convergence criterion of the energy.
+    @param[in] CvgCrit ignored because this legacy entry point is disabled.
     @param[in] is_row whether the return eigen vectors should be in row-major form.
     @param[in] Tin the initial vector, this should be rank-1
     @param[in] max_krydim ignored because this legacy entry point is disabled.
@@ -2932,7 +2935,7 @@ namespace cytnx {
         This function uses non-restarted Lanczos to approximate a local ground state. For generic
     ground-state eigensolver use, prefer the ARPACK-backed Lanczos(..., which="SA") overload.
     @param[in] Hop the Linear Operator defined by LinOp class or it's inheritance (see LinOp).
-    @param[in] CvgCrit the convergence criterion of the energy.
+    @param[in] residual_tol desired Ritz residual tolerance.
     @param[in] is_V if set to true, the eigen vectors will be returned.
     @param[in] Tin the initial vector, this should be rank-1
     @param[in] verbose print out iteration info.
@@ -2943,7 +2946,7 @@ namespace cytnx {
         To use, define a linear operator with LinOp class either by assign a custom function or
     create a class that inherit LinOp (see LinOp for further details)
     */
-    std::vector<Tensor> Lanczos_Gnd(LinOp *Hop, double CvgCrit = 1.0e-14, bool is_V = true,
+    std::vector<Tensor> Lanczos_Gnd(LinOp *Hop, double residual_tol = 1.0e-14, bool is_V = true,
                                     const Tensor &Tin = Tensor(), bool verbose = false,
                                     unsigned int Maxiter = 20);
 
@@ -2956,7 +2959,7 @@ namespace cytnx {
         This function uses non-restarted Lanczos to approximate a local ground state. For generic
     ground-state eigensolver use, prefer the ARPACK-backed Lanczos(..., which="SA") overload.
     @param[in] Hop the Linear Operator defined by LinOp class or it's inheritance (see LinOp).
-    @param[in] CvgCrit the convergence criterion of the energy.
+    @param[in] residual_tol desired Ritz residual tolerance.
     @param[in] is_V if set to true, the eigen vectors will be returned.
     @param[in] Tin the initial vector, this should be a UniTensor.
     @param[in] verbose print out iteration info.
@@ -2968,7 +2971,7 @@ namespace cytnx {
     create a class that inherit LinOp (see LinOp for further details)
     */
     std::vector<UniTensor> Lanczos_Gnd_Ut(LinOp *Hop, const cytnx::UniTensor &Tin,
-                                          double CvgCrit = 1.0e-14, bool is_V = true,
+                                          double residual_tol = 1.0e-14, bool is_V = true,
                                           bool verbose = false, unsigned int Maxiter = 20);
 
     // Lanczos_Exp:
