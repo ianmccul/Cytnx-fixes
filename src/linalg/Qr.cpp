@@ -86,6 +86,20 @@ namespace cytnx {
       }
     }
 
+    std::vector<Tensor> Lq(const Tensor &Tin, const bool &is_tau) {
+      cytnx_error_msg(Tin.shape().size() != 2,
+                      "[Lq] error, Lq can only operate on rank-2 Tensor.%s", "\n");
+      cytnx_error_msg(is_tau, "[Lq] returning tau is currently not supported.%s", "\n");
+
+      Tensor transposed = Tin.permute({1, 0}).contiguous();
+      std::vector<Tensor> qr = Qr(transposed, false);
+      std::vector<Tensor> out;
+      out.reserve(2);
+      out.push_back(qr[1].permute({1, 0}).contiguous());  // L = R(transpose(Tin))^T
+      out.push_back(qr[0].permute({1, 0}).contiguous());  // Q = Q(transpose(Tin))^T
+      return out;
+    }
+
     static void Qr_Dense_UT_internal(std::vector<UniTensor> &outCyT, const UniTensor &Tin,
                                      const bool &is_tau) {
       Tensor tmp;
@@ -161,6 +175,77 @@ namespace cytnx {
         outCyT[1]._impl->_is_braket_form = outCyT[1]._impl->_update_braket();
       }  // if tag
     }  // QR_Dense_UT_internal
+
+    static void Lq_Dense_UT_internal(std::vector<UniTensor> &outCyT, const UniTensor &Tin,
+                                     const bool &is_tau) {
+      Tensor tmp;
+      if (Tin.is_contiguous())
+        tmp = Tin.get_block_();
+      else {
+        tmp = Tin.get_block();
+        tmp.contiguous_();
+      }
+
+      std::vector<cytnx_uint64> tmps = tmp.shape();
+      std::vector<cytnx_int64> oldshape(tmps.begin(), tmps.end());
+      tmps.clear();
+      std::vector<std::string> oldlabel = Tin.labels();
+
+      cytnx_int64 rowdim = 1;
+      for (cytnx_uint64 i = 0; i < Tin.rowrank(); i++) rowdim *= tmp.shape()[i];
+      tmp.reshape_({rowdim, -1});
+
+      std::vector<Tensor> outT = cytnx::linalg::Lq(tmp, is_tau);
+      if (Tin.is_contiguous()) tmp.reshape_(oldshape);
+
+      outCyT.resize(outT.size());
+
+      std::string newlbl = "_aux_";
+
+      // L
+      std::vector<cytnx_int64> Lshape;
+      std::vector<std::string> Llbl;
+      for (int i = 0; i < Tin.rowrank(); i++) {
+        Lshape.push_back(oldshape[i]);
+        Llbl.push_back(oldlabel[i]);
+      }
+      Lshape.push_back(-1);
+      Llbl.push_back(newlbl);
+      outT[0].reshape_(Lshape);
+      outCyT[0] = UniTensor(outT[0], false, Lshape.size() - 1);
+      outCyT[0].relabel_(Llbl);
+
+      // Q
+      std::vector<cytnx_int64> Qshape;
+      std::vector<std::string> Qlbl;
+      Qshape.push_back(-1);
+      Qlbl.push_back(newlbl);
+      for (int i = Tin.rowrank(); i < Tin.rank(); i++) {
+        Qshape.push_back(oldshape[i]);
+        Qlbl.push_back(oldlabel[i]);
+      }
+      outT[1].reshape_(Qshape);
+      outCyT[1] = UniTensor(outT[1], false, 1);
+      outCyT[1].relabel_(Qlbl);
+
+      if (is_tau) outCyT[2] = UniTensor(outT[2], false, 0);
+
+      if (Tin.is_tag()) {
+        outCyT[0].tag();
+        outCyT[1].tag();
+        for (int i = 0; i < Tin.rowrank(); i++) {
+          outCyT[0].bonds()[i].set_type(Tin.bonds()[i].type());
+        }
+        outCyT[0].bonds().back().set_type(cytnx::BD_BRA);
+        outCyT[0]._impl->_is_braket_form = outCyT[0]._impl->_update_braket();
+
+        outCyT[1].bonds()[0].set_type(cytnx::BD_KET);
+        for (int i = 1; i < outCyT[1].rank(); i++) {
+          outCyT[1].bonds()[i].set_type(Tin.bonds()[Tin.rowrank() + i - 1].type());
+        }
+        outCyT[1]._impl->_is_braket_form = outCyT[1]._impl->_update_braket();
+      }
+    }  // Lq_Dense_UT_internal
 
     // Block-wise Qr for a symmetric UniTensor. Handles both BlockUniTensor (bosonic) and
     // BlockFermionicUniTensor (fermionic), selected by the template parameter BUT. For the
@@ -420,6 +505,32 @@ namespace cytnx {
       } else {
         cytnx_error_msg(true, "[ERROR][QR] UniTensor type '%s' not supported\n",
                         Tin.uten_type_str().c_str());
+      }
+      return outCyT;
+    }
+
+    std::vector<UniTensor> Lq(const UniTensor &Tin, const bool &is_tau) {
+      cytnx_error_msg(Tin.rank() <= 1,
+                      "[ERROR][LQ] Input UniTensor should have rank>1, but rank is %d\n",
+                      Tin.rank());
+      cytnx_error_msg(Tin.rowrank() < 1,
+                      "[ERROR][LQ] Input UniTensor should have rowrank>0, but rowrank is %d\n",
+                      Tin.rowrank());
+      cytnx_error_msg(
+        Tin.rowrank() >= Tin.rank(),
+        "[ERROR][LQ] Input UniTensor should have rowrank<rank, but rowrank is %d and rank is %d\n",
+        Tin.rowrank(), Tin.rank());
+      cytnx_error_msg(Tin.is_diag(),
+                      "[ERROR][LQ] Input UniTensor is diagonal, so LQ is trivial and not "
+                      "supported. Use other manipulation.%s",
+                      "\n");
+
+      std::vector<UniTensor> outCyT;
+      if (Tin.uten_type() == UTenType.Dense) {
+        Lq_Dense_UT_internal(outCyT, Tin, is_tau);
+      } else {
+        cytnx_error_msg(
+          true, "[ERROR][LQ] Block and fermionic UniTensor Lq are not implemented yet.%s", "\n");
       }
       return outCyT;
     }

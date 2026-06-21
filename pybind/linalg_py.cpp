@@ -788,6 +788,14 @@ void linalg_binding(py::module &m) {
     [](const cytnx::Tensor &Tin, const bool &is_tau) { return cytnx::linalg::Qr(Tin, is_tau); },
     py::arg("Tio"), py::arg("is_tau") = false);
   m_linalg.def(
+    "Lq",
+    [](const cytnx::UniTensor &Tin, const bool &is_tau) { return cytnx::linalg::Lq(Tin, is_tau); },
+    py::arg("Tio"), py::arg("is_tau") = false);
+  m_linalg.def(
+    "Lq",
+    [](const cytnx::Tensor &Tin, const bool &is_tau) { return cytnx::linalg::Lq(Tin, is_tau); },
+    py::arg("Tio"), py::arg("is_tau") = false);
+  m_linalg.def(
     "Qdr",
     [](const cytnx::UniTensor &Tin, const bool &is_tau) { return cytnx::linalg::Qdr(Tin, is_tau); },
     py::arg("Tio"), py::arg("is_tau") = false);

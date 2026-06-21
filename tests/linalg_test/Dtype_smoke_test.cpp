@@ -77,6 +77,15 @@ TEST_P(LinalgDtypeSmoke, QrUsesExpectedWorkingDtypes) {
   EXPECT_EQ(out[1].dtype(), param.real_output);
 }
 
+TEST_P(LinalgDtypeSmoke, LqUsesExpectedWorkingDtypes) {
+  const DtypeCase param = GetParam();
+  std::vector<Tensor> out = linalg::Lq(MakeInvertibleMatrix(param.input));
+
+  ASSERT_EQ(out.size(), 2);
+  EXPECT_EQ(out[0].dtype(), param.real_output);
+  EXPECT_EQ(out[1].dtype(), param.real_output);
+}
+
 TEST_P(LinalgDtypeSmoke, InvMUsesExpectedWorkingDtype) {
   const DtypeCase param = GetParam();
   Tensor out = linalg::InvM(MakeInvertibleMatrix(param.input));

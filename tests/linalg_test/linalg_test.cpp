@@ -47,6 +47,29 @@ namespace {
       }
     }
   }
+
+  void ExpectLqReconstructs(const Tensor &matrix, const double tol) {
+    std::vector<Tensor> lq = linalg::Lq(matrix);
+    ASSERT_EQ(lq.size(), 2u);
+    Tensor L = lq[0];
+    Tensor Q = lq[1];
+    const cytnx_uint64 rows = matrix.shape()[0];
+    const cytnx_uint64 cols = matrix.shape()[1];
+    const cytnx_uint64 k = std::min(rows, cols);
+
+    ASSERT_EQ(L.shape(), std::vector<cytnx_uint64>({rows, k}));
+    ASSERT_EQ(Q.shape(), std::vector<cytnx_uint64>({k, cols}));
+
+    ExpectMatrixNear(linalg::Matmul(L, Q), matrix, tol);
+    ExpectMatrixNear(linalg::Matmul(Q, MatrixAdjoint(Q)), eye(k, Q.dtype()), tol);
+
+    Tensor L_cd = L.astype(Type.ComplexDouble).contiguous();
+    for (cytnx_uint64 i = 0; i < L.shape()[0]; i++) {
+      for (cytnx_uint64 j = i + 1; j < L.shape()[1]; j++) {
+        EXPECT_NEAR(std::abs(L_cd.at<cytnx_complex128>({i, j})), 0.0, tol);
+      }
+    }
+  }
 }  // namespace
 
 TEST_F(linalg_Test, BkUt_Svd_truncate1) {
@@ -285,6 +308,76 @@ TEST(linalg_QrTensor, FactorizesWideComplexMatrix) {
   A.at<cytnx_complex128>({1, 2}) = {0.0, -3.0};
 
   ExpectQrReconstructs(A, 1e-12);
+}
+
+TEST(linalg_LqTensor, FactorizesTallRealMatrix) {
+  Tensor A = zeros({3, 2}, Type.Double);
+  A.at<double>({0, 0}) = 1.0;
+  A.at<double>({0, 1}) = 2.0;
+  A.at<double>({1, 0}) = 3.0;
+  A.at<double>({1, 1}) = 4.0;
+  A.at<double>({2, 0}) = 5.0;
+  A.at<double>({2, 1}) = 7.0;
+
+  ExpectLqReconstructs(A, 1e-12);
+}
+
+TEST(linalg_LqTensor, FactorizesWideRealMatrix) {
+  Tensor A = zeros({2, 3}, Type.Double);
+  A.at<double>({0, 0}) = 1.0;
+  A.at<double>({0, 1}) = 2.0;
+  A.at<double>({0, 2}) = 3.0;
+  A.at<double>({1, 0}) = 4.0;
+  A.at<double>({1, 1}) = 5.0;
+  A.at<double>({1, 2}) = 7.0;
+
+  ExpectLqReconstructs(A, 1e-12);
+}
+
+TEST(linalg_LqTensor, FactorizesTallComplexMatrix) {
+  Tensor A = zeros({3, 2}, Type.ComplexDouble);
+  A.at<cytnx_complex128>({0, 0}) = {1.0, 1.0};
+  A.at<cytnx_complex128>({0, 1}) = {2.0, -1.0};
+  A.at<cytnx_complex128>({1, 0}) = {3.0, 0.5};
+  A.at<cytnx_complex128>({1, 1}) = {-1.0, 0.0};
+  A.at<cytnx_complex128>({2, 0}) = {4.0, 2.0};
+  A.at<cytnx_complex128>({2, 1}) = {0.0, -3.0};
+
+  ExpectLqReconstructs(A, 1e-12);
+}
+
+TEST(linalg_LqTensor, FactorizesWideComplexMatrix) {
+  Tensor A = zeros({2, 3}, Type.ComplexDouble);
+  A.at<cytnx_complex128>({0, 0}) = {1.0, 1.0};
+  A.at<cytnx_complex128>({0, 1}) = {2.0, -1.0};
+  A.at<cytnx_complex128>({0, 2}) = {3.0, 0.5};
+  A.at<cytnx_complex128>({1, 0}) = {-1.0, 0.0};
+  A.at<cytnx_complex128>({1, 1}) = {4.0, 2.0};
+  A.at<cytnx_complex128>({1, 2}) = {0.0, -3.0};
+
+  ExpectLqReconstructs(A, 1e-12);
+}
+
+TEST(linalg_LqUniTensor, FactorizesDenseUniTensor) {
+  Tensor block = zeros({2, 3, 2}, Type.ComplexDouble);
+  cytnx_double value = 1.0;
+  for (cytnx_uint64 i = 0; i < block.shape()[0]; i++)
+    for (cytnx_uint64 j = 0; j < block.shape()[1]; j++)
+      for (cytnx_uint64 k = 0; k < block.shape()[2]; k++) {
+        block.at<cytnx_complex128>({i, j, k}) = {value, 0.25 * value};
+        value += 1.0;
+      }
+  UniTensor A(block, false, 2);
+  A.relabel_({"l", "p", "r"});
+
+  std::vector<UniTensor> lq = linalg::Lq(A);
+  ASSERT_EQ(lq.size(), 2u);
+  EXPECT_EQ(lq[0].labels(), std::vector<std::string>({"l", "p", "_aux_"}));
+  EXPECT_EQ(lq[1].labels(), std::vector<std::string>({"_aux_", "r"}));
+  expect_unitary(lq[1], "_aux_", 1e-12);
+  UniTensor recon = Contract(lq[0], lq[1]);
+  recon.permute_(A.labels());
+  EXPECT_LT(double((recon - A).Norm().item().real()), 1e-12);
 }
 
 // Check if QR works when the first bond is BD_OUT.
