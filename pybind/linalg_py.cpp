@@ -1020,7 +1020,7 @@ void linalg_binding(py::module &m) {
        const unsigned int &Maxiter, const bool &verbose) {
       return cytnx::linalg::Lanczos_Exp(Hop, v, tau, CvgCrit, Maxiter, verbose);
     },
-    py::arg("Hop"), py::arg("v"), py::arg("tau"), py::arg("CvgCrit") = 1.0e-14,
+    py::arg("Hop"), py::arg("v"), py::arg("tau"), py::arg("CvgCrit") = 1.0e-8,
     py::arg("Maxiter") = 100, py::arg("verbose") = false);
 
   m_linalg.def(

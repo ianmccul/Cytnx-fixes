@@ -3017,7 +3017,7 @@ namespace cytnx {
     wrong results without any warning.
     */
     UniTensor Lanczos_Exp(LinOp *Hop, const cytnx::UniTensor &v, const Scalar &tau,
-                          const double &CvgCrit = 1.0e-10, const unsigned int &Maxiter = 100,
+                          const double &CvgCrit = 1.0e-8, const unsigned int &Maxiter = 100,
                           const bool &verbose = false);
 
     // Lstsq:

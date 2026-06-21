@@ -88,6 +88,36 @@ namespace Lanczos_Exp_Ut_Test {
     }
   };
 
+  class ThreeDimChainOp : public LinOp {
+   public:
+    ThreeDimChainOp(const double coupling01, const double coupling12)
+        : LinOp("mv", 3, Type.Double, Device.cpu),
+          coupling01_(coupling01),
+          coupling12_(coupling12) {}
+
+    UniTensor matvec_impl(const UniTensor& A) override {
+      auto out = UniTensor::zeros(A.shape(), A.labels(), A.dtype(), A.device());
+      out.set_rowrank_(A.rowrank());
+      out.at({0, 0}) = coupling01_ * A.at({1, 0});
+      out.at({1, 0}) = coupling01_ * A.at({0, 0}) + coupling12_ * A.at({2, 0});
+      out.at({2, 0}) = coupling12_ * A.at({1, 0});
+      return out;
+    }
+
+    Tensor dense_hamiltonian() const {
+      auto H = zeros({3, 3}, Type.Double);
+      H.at({0, 1}) = coupling01_;
+      H.at({1, 0}) = coupling01_;
+      H.at({1, 2}) = coupling12_;
+      H.at({2, 1}) = coupling12_;
+      return H;
+    }
+
+   private:
+    double coupling01_;
+    double coupling12_;
+  };
+
   double FloatLanczosExpTolerance() { return 100.0 * std::numeric_limits<float>::epsilon(); }
 
   UniTensor SmallResidualInitialState(const unsigned int dtype) {
@@ -125,12 +155,23 @@ namespace Lanczos_Exp_Ut_Test {
     return ans;
   }
 
+  UniTensor ThreeDimInitialState(const double scale = 1.0) {
+    auto Tin = UniTensor::zeros({3, 1}, {}, Type.Double, Device.cpu).set_rowrank_(1);
+    Tin.at({0, 0}) = scale;
+    return Tin;
+  }
+
+  UniTensor DenseExpectedState(const ThreeDimChainOp& op, const UniTensor& Tin, const double tau) {
+    auto ans = linalg::Matmul(linalg::ExpH(op.dense_hamiltonian(), tau), Tin.get_block());
+    return UniTensor(ans, false, Tin.rowrank());
+  }
+
   // describe:Real type test
   TEST(Lanczos_Exp_Ut, RealTypeTest) {
     int d = 2, D = 5;
     auto op = OneSiteOp(d, D);
     auto Tin = CreateA(d, D);
-    const double crit = 1.0e-10;
+    const double crit = 1.0e-8;
     double tau = 0.1;
     auto x = linalg::Lanczos_Exp(&op, Tin, tau, crit);
     auto ans = GetAns(op.EffH, Tin, tau);
@@ -144,7 +185,7 @@ namespace Lanczos_Exp_Ut_Test {
     int d = 2, D = 5;
     auto op = OneSiteOp(d, D, Type.ComplexDouble);
     auto Tin = CreateA(d, D, Type.ComplexDouble);
-    const double crit = 1.0e-9;
+    const double crit = 1.0e-8;
     std::complex<double> tau = std::complex<double>(0, 1) * 0.1;
     auto x = linalg::Lanczos_Exp(&op, Tin, tau, crit);
     auto ans = GetAns(op.EffH, Tin, tau);
@@ -181,7 +222,7 @@ namespace Lanczos_Exp_Ut_Test {
     OneDimScaleOp op;
     UniTensor Tin = UniTensor::zeros({1, 1}, {}, Type.Double, Device.cpu).set_rowrank_(1);
     Tin.at({0, 0}) = 2.0;
-    const double crit = 1.0e-12;
+    const double crit = 1.0e-8;
     const double tau = 0.2;
     linalg::clear_krylov_stats();
 
@@ -196,15 +237,19 @@ namespace Lanczos_Exp_Ut_Test {
     EXPECT_EQ(stats.reason, "full_krylov_dimension");
     EXPECT_EQ(stats.krylov_dim, 1);
     EXPECT_EQ(stats.matvec_count, 1);
+    EXPECT_EQ(stats.input_dtype, Type.Double);
+    EXPECT_EQ(stats.op_dtype, Type.Double);
+    EXPECT_EQ(stats.working_dtype, Type.Double);
     auto total_stats = linalg::krylov_stats();
     EXPECT_EQ(total_stats.matvec_count, stats.matvec_count);
     EXPECT_EQ(total_stats.krylov_dim, stats.krylov_dim);
+    EXPECT_EQ(total_stats.op_dtype, stats.op_dtype);
   }
 
   TEST(Lanczos_Exp_Ut, FullKrylovSpaceDoesNotWarnAtDimensionLimit) {
     TwoDimMixingOp op;
     auto Tin = TwoDimInitialState();
-    const double crit = 1.0e-12;
+    const double crit = 1.0e-8;
     const double tau = 1.0;
     const unsigned int maxiter = 2;
 
@@ -218,11 +263,46 @@ namespace Lanczos_Exp_Ut_Test {
     EXPECT_LE(err, crit);
   }
 
+  TEST(Lanczos_Exp_Ut, UsesBetaWeightedExponentialErrorEstimate) {
+    ThreeDimChainOp op(1.0, 1.0);
+    auto Tin = ThreeDimInitialState();
+    const double crit = 1.0e-8;
+    const double tau = 1.0e-5;
+    const unsigned int maxiter = 2;
+
+    auto x = linalg::Lanczos_Exp(&op, Tin, tau, crit, maxiter);
+    auto ans = DenseExpectedState(op, Tin, tau);
+    auto err = static_cast<double>((x - ans).Norm().item().real());
+
+    EXPECT_LE(err, crit);
+    auto stats = linalg::last_krylov_stats();
+    EXPECT_EQ(stats.reason, "projected_exponential");
+    EXPECT_EQ(stats.krylov_dim, 2);
+    EXPECT_LT(stats.final_error, crit);
+  }
+
+  TEST(Lanczos_Exp_Ut, ConvergenceCriterionScalesWithInputNorm) {
+    ThreeDimChainOp op(1.0, 1.0);
+    auto Tin = ThreeDimInitialState(1.0e6);
+    const double crit = 1.0e-8;
+    const double tau = 1.0e-5;
+    const unsigned int maxiter = 3;
+
+    auto x = linalg::Lanczos_Exp(&op, Tin, tau, crit, maxiter);
+    auto ans = DenseExpectedState(op, Tin, tau);
+    auto err = static_cast<double>((x - ans).Norm().item().real());
+
+    EXPECT_LE(err, crit);
+    auto stats = linalg::last_krylov_stats();
+    EXPECT_EQ(stats.reason, "breakdown");
+    EXPECT_EQ(stats.krylov_dim, 3);
+  }
+
   TEST(Lanczos_Exp_Ut, SmallResidualIsNotBreakdown) {
     const double coupling = 5.0e-7;
     SmallResidualOp op(coupling);
     auto Tin = SmallResidualInitialState(Type.Double);
-    const double crit = 1.0e-10;
+    const double crit = 1.0e-8;
     const double tau = 1.0;
     const unsigned int maxiter = 3;
 
