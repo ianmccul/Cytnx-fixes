@@ -9,6 +9,93 @@ from . import cytnx as _cytnx
 
 _KRYLOV_DIAGNOSTICS_ENV = "CYTNX_KRYLOV_DIAGNOSTICS"
 _KRYLOV_DIAGNOSTICS_FALSE = {"0", "false", "off", "no"}
+_SVD_TRUNCATE_WARNINGS_ENV = "CYTNX_SVD_TRUNCATE_WARNINGS"
+_SVD_TRUNCATE_WARNINGS_FALSE = {"0", "false", "off", "no"}
+_SVD_TRUNCATE_DEFAULT_ERR = 1e-8
+_SVD_TRUNCATE_DEFAULT_ERR_TEXT = "1e-8"
+_CYTNX_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+_SVD_TRUNCATE_DEFAULT_WARNING = """
+cytnx.linalg.Svd_truncate was called without an explicit err cutoff.
+
+This fixes branch changes the Python default to:
+
+    err={err}
+
+This removes numerically null or near-null singular vectors. For typical
+double-precision MPS/TDVP calculations this corresponds to discarded state
+weight around 1e-16, while removing basis directions that are not numerically
+meaningful. Removing near-null singular vectors is especially important for
+TDVP and other tangent-space algorithms, where such directions can corrupt the
+tangent-space projector and give wrong results.
+
+If you are only canonicalizing an MPS and do not need singular values, prefer:
+
+    cytnx.linalg.Qr(...)    # left-canonicalization
+    cytnx.linalg.Lq(...)    # right-canonicalization
+
+If you want singular values but do not want truncation, use:
+
+    cytnx.linalg.Svd(...)
+    cytnx.linalg.Gesvd(...)
+
+If you deliberately want to keep null singular vectors, pass a negative cutoff:
+
+    cytnx.linalg.Svd_truncate(T, keepdim, err=-1)
+
+This warning is shown once per Python call site. You can silence it globally:
+
+    cytnx.linalg.set_svd_truncate_warnings(False)
+
+or with the environment variable:
+
+    export CYTNX_SVD_TRUNCATE_WARNINGS=0
+
+The best long-term fix is to pass an explicit cutoff at every call site, for
+example:
+
+    cytnx.linalg.Svd_truncate(T, keepdim, err={err})
+""".strip()
+_SVD_TRUNCATE_ZERO_ERROR = """
+cytnx.linalg.Svd_truncate no longer accepts err=0 from Python.
+
+The value err=0 is ambiguous and unsafe. In most tensor-network code, a call to
+Svd_truncate means either:
+
+1. truncate an MPS bond using a singular-value cutoff; or
+2. canonicalize a tensor network bond.
+
+For case 1, keeping numerically null singular vectors is usually wrong. It is
+particularly dangerous in TDVP and other tangent-space algorithms, because the
+null-space basis enters the projector. An arbitrary numerical null-space basis
+can therefore change the algorithm.
+
+For case 2, Svd_truncate is usually the wrong tool. If you only want
+canonicalization and do not need singular values, prefer:
+
+    cytnx.linalg.Qr(...)    # left-canonicalization
+    cytnx.linalg.Lq(...)    # right-canonicalization
+
+If you want singular values but do not want truncation, use:
+
+    cytnx.linalg.Svd(...)
+    cytnx.linalg.Gesvd(...)
+
+If you are using Svd_truncate to truncate an MPS bond, the MPS must already be
+canonical at that bond. Then choose one of these explicit meanings:
+
+    err=1e-8
+        Remove numerical zero and near-zero singular values. This corresponds
+        to discarded state weight around 1e-16 and is the recommended default
+        for double-precision MPS/TDVP-style calculations.
+
+    err=<positive cutoff>
+        Apply your own positive singular-value cutoff.
+
+    err=-1
+        Keep every singular vector, including numerically zero vectors. Use
+        this only if you have checked that the null-space basis cannot affect
+        later calculations.
+""".strip()
 
 
 def _env_krylov_diagnostics_enabled():
@@ -16,7 +103,14 @@ def _env_krylov_diagnostics_enabled():
     return value.strip().lower() not in _KRYLOV_DIAGNOSTICS_FALSE
 
 
+def _env_svd_truncate_warnings_enabled():
+    value = os.environ.get(_SVD_TRUNCATE_WARNINGS_ENV, "1")
+    return value.strip().lower() not in _SVD_TRUNCATE_WARNINGS_FALSE
+
+
 _krylov_diagnostics_enabled = _env_krylov_diagnostics_enabled()
+_svd_truncate_warnings_enabled = _env_svd_truncate_warnings_enabled()
+_svd_truncate_warning_sites = set()
 
 
 def set_krylov_diagnostics(enabled=True):
@@ -28,6 +122,17 @@ def set_krylov_diagnostics(enabled=True):
 def get_krylov_diagnostics():
     """Return whether automatic Lanczos/Krylov diagnostics are enabled."""
     return _krylov_diagnostics_enabled
+
+
+def set_svd_truncate_warnings(enabled=True):
+    """Enable or disable Svd_truncate zero-cutoff call-site warnings."""
+    global _svd_truncate_warnings_enabled
+    _svd_truncate_warnings_enabled = bool(enabled)
+
+
+def get_svd_truncate_warnings():
+    """Return whether Svd_truncate zero-cutoff call-site warnings are enabled."""
+    return _svd_truncate_warnings_enabled
 
 
 def _call_zero_arg(obj, name):
@@ -319,3 +424,95 @@ Lanczos.__cytnx_native_lanczos__ = _native_Lanczos
 _cytnx.linalg.Lanczos = Lanczos
 _cytnx.linalg.set_krylov_diagnostics = set_krylov_diagnostics
 _cytnx.linalg.get_krylov_diagnostics = get_krylov_diagnostics
+
+
+def _is_cytnx_python_file(filename):
+    try:
+        path = os.path.abspath(filename)
+        return os.path.commonpath([path, _CYTNX_PACKAGE_DIR]) == _CYTNX_PACKAGE_DIR
+    except Exception:
+        return False
+
+
+def _python_user_call_site():
+    frame = sys._getframe(2)
+    while frame is not None:
+        filename = frame.f_code.co_filename
+        if not _is_cytnx_python_file(filename):
+            return filename, frame.f_lineno
+        frame = frame.f_back
+    return "<unknown>", 0
+
+
+def _is_min_blockdim_argument(value):
+    if isinstance(value, (str, bytes)):
+        return False
+    return isinstance(value, (list, tuple))
+
+
+def _svd_truncate_explicit_err(args, kwargs):
+    if "err" in kwargs:
+        return True, kwargs["err"]
+    if len(args) < 3:
+        return False, None
+    if _is_min_blockdim_argument(args[2]):
+        if len(args) < 4:
+            return False, None
+        return True, args[3]
+    return True, args[2]
+
+
+def _is_zero_cutoff(value):
+    try:
+        return float(value) == 0.0
+    except Exception:
+        return False
+
+
+def _is_negative_cutoff(value):
+    try:
+        return float(value) < 0.0
+    except Exception:
+        return False
+
+
+def _warn_svd_truncate_default_cutoff(args, kwargs):
+    if not _svd_truncate_warnings_enabled:
+        return
+    filename, lineno = _python_user_call_site()
+    site = (filename, lineno)
+    if site in _svd_truncate_warning_sites:
+        return
+    _svd_truncate_warning_sites.add(site)
+    message = _SVD_TRUNCATE_DEFAULT_WARNING.format(err=_SVD_TRUNCATE_DEFAULT_ERR_TEXT)
+    warnings.warn_explicit(message, RuntimeWarning, filename, lineno)
+
+
+def _svd_truncate_checked_args(args, kwargs):
+    has_err, err = _svd_truncate_explicit_err(args, kwargs)
+    if not has_err:
+        _warn_svd_truncate_default_cutoff(args, kwargs)
+        kwargs = dict(kwargs)
+        kwargs["err"] = _SVD_TRUNCATE_DEFAULT_ERR
+        return args, kwargs
+    if _is_zero_cutoff(err):
+        raise ValueError(_SVD_TRUNCATE_ZERO_ERROR)
+    if _is_negative_cutoff(err):
+        return args, kwargs
+    return args, kwargs
+
+
+_native_Svd_truncate = getattr(
+    _cytnx.linalg.Svd_truncate, "__cytnx_native_svd_truncate__", _cytnx.linalg.Svd_truncate
+)
+
+
+def Svd_truncate(*args, **kwargs):
+    args, kwargs = _svd_truncate_checked_args(args, kwargs)
+    return _native_Svd_truncate(*args, **kwargs)
+
+
+Svd_truncate.__cytnx_native_svd_truncate__ = _native_Svd_truncate
+_cytnx.linalg.Svd_truncate = Svd_truncate
+_cytnx.linalg.set_svd_truncate_warnings = set_svd_truncate_warnings
+_cytnx.linalg.get_svd_truncate_warnings = get_svd_truncate_warnings
