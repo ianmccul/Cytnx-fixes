@@ -2,6 +2,7 @@
 #define TEST_TOOLS_H_
 
 #include <complex>
+#include <filesystem>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -59,6 +60,7 @@ namespace cytnx {
                      const std::vector<cytnx_uint64>& idices2);
 
     void InitUniTensorUniform(UniTensor& UT, unsigned int rand_seed = 0);
+    std::filesystem::path TempFilePath(const std::string& suffix = "");
 
     /**
      * Helper function for the EXPECT_NUMBER_EQ assertion.

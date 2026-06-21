@@ -321,6 +321,7 @@ if(RUN_TESTS)
   # Include CTest explicitly to suppress the error that DartConfiguration.tcl
   # is not found
   include(CTest)
+  option(CYTNX_ENABLE_COVERAGE "Enable gcov-style coverage instrumentation for test builds" ON)
 
   # Source-level coverage instrumentation for the library and anything that
   # links it (e.g. the gtest binary under tests/, which links cytnx PUBLIC).
@@ -339,7 +340,9 @@ if(RUN_TESTS)
   #     typically collected with OpenCppCoverage (post-build binary
   #     instrumentation), which needs no CMake flags. Skip silently except
   #     for a status message so configure still succeeds.
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
+  if(NOT CYTNX_ENABLE_COVERAGE)
+    message(STATUS "Coverage: disabled by CYTNX_ENABLE_COVERAGE=OFF.")
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
      CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(cytnx PUBLIC $<BUILD_INTERFACE:--coverage>)
     target_link_options(cytnx PUBLIC $<BUILD_INTERFACE:--coverage>)

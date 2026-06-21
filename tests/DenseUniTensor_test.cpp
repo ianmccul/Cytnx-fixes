@@ -4874,9 +4874,9 @@ TEST_F(DenseUniTensorTest, Save) {
 describe:test Save Load not exist file
 ====================*/
 TEST_F(DenseUniTensorTest, Save_path_incorrect) {
-  std::filesystem::path file_path_under_non_existent_folder = std::tmpnam(nullptr);
-  std::filesystem::path temp_filename = std::tmpnam(nullptr);
-  // std::tmpnam(nullptr) returns full temp file path, like /tmp/fileRandSuffix
+  std::filesystem::path file_path_under_non_existent_folder = TempFilePath();
+  std::filesystem::path temp_filename = TempFilePath();
+  // TempFilePath returns a full temp file path, like /tmp/fileRandSuffix
   file_path_under_non_existent_folder /= temp_filename.filename();
   file_path_under_non_existent_folder += ".cytnx";
   auto row_rank = 1u;

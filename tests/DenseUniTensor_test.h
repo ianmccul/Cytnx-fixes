@@ -14,7 +14,7 @@ using namespace TestTools;
 class DenseUniTensorTest : public ::testing::Test {
  public:
   std::string data_dir = CYTNX_TEST_DATA_DIR "/common/DenseUniTensor/";
-  const std::string temp_file_path = std::string(std::tmpnam(nullptr)) + ".cytnx";
+  const std::string temp_file_path = TempFilePath(".cytnx").string();
 
   UniTensor ut_uninit;
   UniTensor utzero345;
