@@ -1011,6 +1011,14 @@ namespace cytnx {
     std::vector<cytnx::UniTensor> Qr(const cytnx::UniTensor &Tin, const bool &is_tau = false);
 
     /**
+     * @brief Perform the LQ decomposition on a UniTensor.
+     * @details This function performs the LQ decomposition on a UniTensor \p Tin.
+     * The result depends on the rowrank of \p Tin in the same way as Qr().
+     * @see Lq(const Tensor &Tin, const bool &is_tau)
+     */
+    std::vector<cytnx::UniTensor> Lq(const cytnx::UniTensor &Tin, const bool &is_tau = false);
+
+    /**
      * @brief Perform the QDR decomposition on a UniTensor.
      * @details This function performs the QDR decomposition on a UniTensor \p Tin.
      * The result will depend on the rowrank of the UniTensor \p Tin. For more details,
@@ -2002,6 +2010,33 @@ namespace cytnx {
     @see Qdr(const Tensor &Tin, const bool &is_tau)
     */
     std::vector<Tensor> Qr(const Tensor &Tin, const bool &is_tau = false);
+
+    // Lq:
+    //==================================================
+    /**
+    @brief Perform LQ decomposition on a rank-2 Tensor.
+    @details This function will perform LQ decomposition on a matrix (a rank-2 Tensor). That means
+    given a matrix \p Tin as \f$ M \f$, then the result will be:
+    \f[
+    M = L Q,
+    \f]
+    where \f$ L \f$ is a left-lower triangular matrix, and \f$ Q \f$ is an orthonormal matrix.
+
+    @param[in] Tin a Tensor, it should be a rank-2 tensor (a @em matrix)
+    @param[in] is_tau if return the tau that contains the Householder reflectors. Currently not
+    supported for Lq.
+
+    @return
+    @parblock
+    [std::vector<Tensors>]
+
+    1. the first tensor is the left-lower triangular matrix \f$ L \f$, a 2-d tensor (matrix)
+    2. the second tensor is the orthonormal matrix \f$ Q \f$, a 2-d tensor (matrix)
+    @endparblock
+    @pre The input tensor should be a rank-2 tensor (matrix).
+    @see Qr(const Tensor &Tin, const bool &is_tau)
+    */
+    std::vector<Tensor> Lq(const Tensor &Tin, const bool &is_tau = false);
 
     // Qdr:
     //==================================================
