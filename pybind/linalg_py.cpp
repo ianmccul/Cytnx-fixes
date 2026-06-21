@@ -35,7 +35,10 @@ namespace {
     out["maxiter_used"] = stats.maxiter_used;
     out["cvgcrit_requested"] = stats.cvgcrit_requested;
     out["cvgcrit_used"] = stats.cvgcrit_used;
+    out["residual_tol_requested"] = stats.residual_tol_requested;
+    out["residual_tol_used"] = stats.residual_tol_used;
     out["final_error"] = stats.final_error;
+    out["final_residual"] = stats.final_residual;
     out["final_beta"] = stats.final_beta;
     out["breakdown_tol"] = stats.breakdown_tol;
     out["input_dtype"] = stats.input_dtype;
@@ -959,24 +962,24 @@ void linalg_binding(py::module &m) {
 
   m_linalg.def(
     "Lanczos",
-    [](LinOp *Hop, const Tensor &Tin, const std::string method, double CvgCrit,
+    [](LinOp *Hop, const Tensor &Tin, const std::string method, double residual_tol,
        unsigned int Maxiter, cytnx_uint64 k, bool is_V, bool is_row, cytnx_uint32 max_krydim,
        bool verbose) {
-      return cytnx::linalg::Lanczos(Hop, Tin, method, CvgCrit, Maxiter, k, is_V, is_row, max_krydim,
-                                    verbose);
+      return cytnx::linalg::Lanczos(Hop, Tin, method, residual_tol, Maxiter, k, is_V, is_row,
+                                    max_krydim, verbose);
     },
-    py::arg("Hop"), py::arg("Tin"), py::arg("method"), py::arg("CvgCrit") = 1.0e-14,
+    py::arg("Hop"), py::arg("Tin"), py::arg("method"), py::arg("residual_tol") = 1.0e-14,
     py::arg("Maxiter") = 20, py::arg("k") = 1, py::arg("is_V") = true, py::arg("is_row") = false,
     py::arg("max_krydim") = 0, py::arg("verbose") = false);
   m_linalg.def(
     "Lanczos",
-    [](LinOp *Hop, const UniTensor &Tin, const std::string method, double CvgCrit,
+    [](LinOp *Hop, const UniTensor &Tin, const std::string method, double residual_tol,
        unsigned int Maxiter, cytnx_uint64 k, bool is_V, bool is_row, cytnx_uint32 max_krydim,
        bool verbose) {
-      return cytnx::linalg::Lanczos(Hop, Tin, method, CvgCrit, Maxiter, k, is_V, is_row, max_krydim,
-                                    verbose);
+      return cytnx::linalg::Lanczos(Hop, Tin, method, residual_tol, Maxiter, k, is_V, is_row,
+                                    max_krydim, verbose);
     },
-    py::arg("Hop"), py::arg("Tin"), py::arg("method"), py::arg("CvgCrit") = 1.0e-14,
+    py::arg("Hop"), py::arg("Tin"), py::arg("method"), py::arg("residual_tol") = 1.0e-14,
     py::arg("Maxiter") = 20, py::arg("k") = 1, py::arg("is_V") = true, py::arg("is_row") = false,
     py::arg("max_krydim") = 0, py::arg("verbose") = false);
 

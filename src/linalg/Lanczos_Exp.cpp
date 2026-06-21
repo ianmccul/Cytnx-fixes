@@ -526,7 +526,7 @@ namespace cytnx {
     UniTensor Lanczos_Exp(LinOp *Hop, const UniTensor &Tin, const Scalar &tau,
                           const double &CvgCrit, const unsigned int &Maxiter, const bool &verbose) {
       // check device:
-      cytnx_error_msg(Hop->device() != Device.cpu,
+      cytnx_error_msg(Tin.device() != Device.cpu,
                       "[ERROR][Lanczos_Exp] Lanczos_Exp still does not support cuda devices.%s",
                       "\n");
       cytnx_error_msg(Tin.uten_type() != UTenType.Dense,

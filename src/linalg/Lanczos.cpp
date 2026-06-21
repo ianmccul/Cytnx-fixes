@@ -149,10 +149,10 @@ namespace cytnx {
     }
 
     std::vector<Tensor> Lanczos(LinOp *Hop, const Tensor &Tin, const std::string method,
-                                double CvgCrit, unsigned int Maxiter, cytnx_uint64 k, bool is_V,
-                                bool is_row, cytnx_uint32 max_krydim, bool verbose) {
+                                double residual_tol, unsigned int Maxiter, cytnx_uint64 k,
+                                bool is_V, bool is_row, cytnx_uint32 max_krydim, bool verbose) {
       if (method == "ER") {
-        return Lanczos_ER(Hop, k, is_V, Maxiter, CvgCrit, is_row, Tin, max_krydim, verbose);
+        return Lanczos_ER(Hop, k, is_V, Maxiter, residual_tol, is_row, Tin, max_krydim, verbose);
       } else if (method == "Gnd") {
         cytnx_error_msg(k > 1, "[ERROR][Lanczos] Only k = 1 is supported for 'Gnd' method.%s",
                         "\n");
@@ -160,7 +160,7 @@ namespace cytnx {
           max_krydim > 0,
           "[WARNING][Lanczos] max_krydim > 0 while it is irrelevant when using 'Gnd' method.%s",
           "\n");
-        return Lanczos_Gnd(Hop, CvgCrit, is_V, Tin, verbose, Maxiter);
+        return Lanczos_Gnd(Hop, residual_tol, is_V, Tin, verbose, Maxiter);
       } else {
         cytnx_error_msg(
           true,
@@ -176,8 +176,8 @@ namespace cytnx {
     }  // Lanczos
 
     std::vector<UniTensor> Lanczos(LinOp *Hop, const UniTensor &Tin, const std::string method,
-                                   double CvgCrit, unsigned int Maxiter, cytnx_uint64 k, bool is_V,
-                                   bool is_row, cytnx_uint32 max_krydim, bool verbose) {
+                                   double residual_tol, unsigned int Maxiter, cytnx_uint64 k,
+                                   bool is_V, bool is_row, cytnx_uint32 max_krydim, bool verbose) {
       if (method == "ER") {
         KrylovStats stats;
         stats.algorithm = "Lanczos_ER_Ut";
@@ -185,8 +185,10 @@ namespace cytnx {
         stats.reason = "disabled";
         stats.maxiter_requested = Maxiter;
         stats.maxiter_used = Maxiter;
-        stats.cvgcrit_requested = CvgCrit;
-        stats.cvgcrit_used = CvgCrit;
+        stats.cvgcrit_requested = residual_tol;
+        stats.cvgcrit_used = residual_tol;
+        stats.residual_tol_requested = residual_tol;
+        stats.residual_tol_used = residual_tol;
         stats.krylov_dim = max_krydim;
         stats.input_dtype = Tin.dtype();
         stats.working_dtype = Tin.dtype();
@@ -205,7 +207,7 @@ namespace cytnx {
           max_krydim > 0,
           "[WARNING][Lanczos] max_krydim > 0 while it is irrelevant when using 'Gnd' method.%s",
           "\n");
-        return Lanczos_Gnd_Ut(Hop, Tin, CvgCrit, is_V, verbose, Maxiter);
+        return Lanczos_Gnd_Ut(Hop, Tin, residual_tol, is_V, verbose, Maxiter);
       } else {
         cytnx_error_msg(
           true,
