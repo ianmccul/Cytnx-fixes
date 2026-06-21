@@ -1,6 +1,9 @@
 #include "test_tools.h"
 
 #include <exception>
+#include <atomic>
+#include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -35,6 +38,14 @@ namespace cytnx {
         fail_msgs.pop_back();
       }
       return trace_msg;
+    }
+
+    std::filesystem::path TempFilePath(const std::string& suffix) {
+      static std::atomic<unsigned long long> counter{0};
+      const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
+      return std::filesystem::temp_directory_path() /
+             ("cytnx-test-" + std::to_string(ticks) + "-" + std::to_string(counter.fetch_add(1)) +
+              suffix);
     }
 
     bool AreNearlyEqStorage(const Storage& stor1, const Storage& stor2, const cytnx_double tol) {
@@ -289,9 +300,8 @@ namespace cytnx {
             auto t1_val = T1.at<std::complex<double>>(idices1);
             auto t2_val = T2.at<std::complex<double>>(idices2);
             if (t1_val != t2_val) {
-              std::cout << "[AreElemSame]"
-                        << "T1[" << idices1 << "] = " << t1_val << ", "
-                        << "T2[" << idices2 << "] = " << t2_val << ", not same." << std::endl;
+              std::cout << "[AreElemSame]" << "T1[" << idices1 << "] = " << t1_val << ", " << "T2["
+                        << idices2 << "] = " << t2_val << ", not same." << std::endl;
               return false;
             }
             break;
@@ -300,9 +310,8 @@ namespace cytnx {
             auto t1_val = T1.at<std::complex<float>>(idices1);
             auto t2_val = T2.at<std::complex<float>>(idices2);
             if (t1_val != t2_val) {
-              std::cout << "[AreElemSame]"
-                        << "T1[" << idices1 << "] = " << t1_val << ", "
-                        << "T2[" << idices2 << "] = " << t2_val << ", not same." << std::endl;
+              std::cout << "[AreElemSame]" << "T1[" << idices1 << "] = " << t1_val << ", " << "T2["
+                        << idices2 << "] = " << t2_val << ", not same." << std::endl;
               return false;
             }
             break;
@@ -311,9 +320,8 @@ namespace cytnx {
             auto t1_val = T1.at<double>(idices1);
             auto t2_val = T2.at<double>(idices2);
             if (t1_val != t2_val) {
-              std::cout << "[AreElemSame]"
-                        << "T1[" << idices1 << "] = " << t1_val << ", "
-                        << "T2[" << idices2 << "] = " << t2_val << ", not same." << std::endl;
+              std::cout << "[AreElemSame]" << "T1[" << idices1 << "] = " << t1_val << ", " << "T2["
+                        << idices2 << "] = " << t2_val << ", not same." << std::endl;
               return false;
             }
             break;
@@ -322,9 +330,8 @@ namespace cytnx {
             auto t1_val = T1.at<float>(idices1);
             auto t2_val = T2.at<float>(idices2);
             if (t1_val != t2_val) {
-              std::cout << "[AreElemSame]"
-                        << "T1[" << idices1 << "] = " << t1_val << ", "
-                        << "T2[" << idices2 << "] = " << t2_val << ", not same." << std::endl;
+              std::cout << "[AreElemSame]" << "T1[" << idices1 << "] = " << t1_val << ", " << "T2["
+                        << idices2 << "] = " << t2_val << ", not same." << std::endl;
               return false;
             }
             break;
@@ -333,9 +340,8 @@ namespace cytnx {
             auto t1_val = T1.at<int64_t>(idices1);
             auto t2_val = T2.at<int64_t>(idices2);
             if (t1_val != t2_val) {
-              std::cout << "[AreElemSame]"
-                        << "T1[" << idices1 << "] = " << t1_val << ", "
-                        << "T2[" << idices2 << "] = " << t2_val << ", not same." << std::endl;
+              std::cout << "[AreElemSame]" << "T1[" << idices1 << "] = " << t1_val << ", " << "T2["
+                        << idices2 << "] = " << t2_val << ", not same." << std::endl;
               return false;
             }
             break;
@@ -344,9 +350,8 @@ namespace cytnx {
             auto t1_val = T1.at<uint64_t>(idices1);
             auto t2_val = T2.at<uint64_t>(idices2);
             if (t1_val != t2_val) {
-              std::cout << "[AreElemSame]"
-                        << "T1[" << idices1 << "] = " << t1_val << ", "
-                        << "T2[" << idices2 << "] = " << t2_val << ", not same." << std::endl;
+              std::cout << "[AreElemSame]" << "T1[" << idices1 << "] = " << t1_val << ", " << "T2["
+                        << idices2 << "] = " << t2_val << ", not same." << std::endl;
               return false;
             }
             break;
@@ -355,9 +360,8 @@ namespace cytnx {
             auto t1_val = T1.at<int32_t>(idices1);
             auto t2_val = T2.at<int32_t>(idices2);
             if (t1_val != t2_val) {
-              std::cout << "[AreElemSame]"
-                        << "T1[" << idices1 << "] = " << t1_val << ", "
-                        << "T2[" << idices2 << "] = " << t2_val << ", not same." << std::endl;
+              std::cout << "[AreElemSame]" << "T1[" << idices1 << "] = " << t1_val << ", " << "T2["
+                        << idices2 << "] = " << t2_val << ", not same." << std::endl;
               return false;
             }
             break;
@@ -366,9 +370,8 @@ namespace cytnx {
             auto t1_val = T1.at<uint32_t>(idices1);
             auto t2_val = T2.at<uint32_t>(idices2);
             if (t1_val != t2_val) {
-              std::cout << "[AreElemSame]"
-                        << "T1[" << idices1 << "] = " << t1_val << ", "
-                        << "T2[" << idices2 << "] = " << t2_val << ", not same." << std::endl;
+              std::cout << "[AreElemSame]" << "T1[" << idices1 << "] = " << t1_val << ", " << "T2["
+                        << idices2 << "] = " << t2_val << ", not same." << std::endl;
               return false;
             }
             break;
@@ -383,9 +386,8 @@ namespace cytnx {
             auto t1_val = T1.at<uint16_t>(idices1);
             auto t2_val = T2.at<uint16_t>(idices2);
             if (t1_val != t2_val) {
-              std::cout << "[AreElemSame]"
-                        << "T1[" << idices1 << "] = " << t1_val << ", "
-                        << "T2[" << idices2 << "] = " << t2_val << ", not same." << std::endl;
+              std::cout << "[AreElemSame]" << "T1[" << idices1 << "] = " << t1_val << ", " << "T2["
+                        << idices2 << "] = " << t2_val << ", not same." << std::endl;
               return false;
             }
             break;
@@ -394,9 +396,8 @@ namespace cytnx {
             auto t1_val = T1.at<bool>(idices1);
             auto t2_val = T2.at<bool>(idices2);
             if (t1_val != t2_val) {
-              std::cout << "[AreElemSame]"
-                        << "T1[" << idices1 << "] = " << t1_val << ", "
-                        << "T2[" << idices2 << "] = " << t2_val << ", not same." << std::endl;
+              std::cout << "[AreElemSame]" << "T1[" << idices1 << "] = " << t1_val << ", " << "T2["
+                        << idices2 << "] = " << t2_val << ", not same." << std::endl;
               return false;
             }
             break;
