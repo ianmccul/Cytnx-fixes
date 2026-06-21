@@ -21,6 +21,7 @@ add_executable(
   BlockUniTensor_test.cpp
   BlockFermionicUniTensor_test.cpp
   DenseUniTensor_test.cpp
+  LinOp_test.cpp
   Accessor_test.cpp
   Tensor_test.cpp
   Storage_test.cpp
