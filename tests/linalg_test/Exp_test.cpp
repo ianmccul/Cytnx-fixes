@@ -58,37 +58,3 @@ TEST(ExpTest, ExpPromotesIntegerInputToDouble) {
   EXPECT_NEAR(output.at<double>({0}), 1.0, kDoubleTol);
   EXPECT_NEAR(output.at<double>({1}), std::exp(1.0), kDoubleTol);
 }
-
-TEST(ExpTest, ExpfCastsDoubleInputToFloat) {
-  Tensor input = MakeVector(Type.Double);
-
-  Tensor output = linalg::Expf(input);
-
-  EXPECT_EQ(output.dtype(), Type.Float);
-  EXPECT_NEAR(output.at<float>({0}), 1.0, kFloatTol);
-  EXPECT_NEAR(output.at<float>({1}), std::exp(1.0f), kFloatTol);
-}
-
-TEST(ExpTest, ExpfCastsComplexDoubleInputToComplexFloat) {
-  Tensor input = MakeComplexVector(Type.ComplexDouble);
-
-  Tensor output = linalg::Expf(input);
-
-  EXPECT_EQ(output.dtype(), Type.ComplexFloat);
-  const auto got_zero = output.at<cytnx_complex64>({0});
-  const auto got_i = output.at<cytnx_complex64>({1});
-  EXPECT_NEAR(got_zero.real(), 1.0, kFloatTol);
-  EXPECT_NEAR(got_zero.imag(), 0.0, kFloatTol);
-  EXPECT_NEAR(got_i.real(), std::cos(1.0f), kFloatTol);
-  EXPECT_NEAR(got_i.imag(), std::sin(1.0f), kFloatTol);
-}
-
-TEST(ExpTest, ExpfPromotesIntegerInputToFloat) {
-  Tensor input = MakeVector(Type.Int16);
-
-  Tensor output = linalg::Expf(input);
-
-  EXPECT_EQ(output.dtype(), Type.Float);
-  EXPECT_NEAR(output.at<float>({0}), 1.0, kFloatTol);
-  EXPECT_NEAR(output.at<float>({1}), std::exp(1.0f), kFloatTol);
-}

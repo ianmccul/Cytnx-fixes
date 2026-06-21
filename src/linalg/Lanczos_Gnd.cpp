@@ -174,13 +174,14 @@ namespace cytnx {
 
       void initialize_common_stats(KrylovStats &stats, const std::string &algorithm,
                                    const unsigned int maxiter, const double residual_tol,
-                                   const unsigned int input_dtype,
+                                   const unsigned int input_dtype, const unsigned int op_dtype,
                                    const unsigned int working_dtype) {
         stats.algorithm = algorithm;
         stats.maxiter_requested = maxiter;
         stats.residual_tol_requested = residual_tol;
         stats.residual_tol_used = residual_tol;
         stats.input_dtype = input_dtype;
+        stats.op_dtype = op_dtype;
         stats.working_dtype = working_dtype;
       }
 
@@ -212,7 +213,7 @@ namespace cytnx {
       TensorLanczosOps ops(Hop, working_dtype);
       KrylovStats stats;
       initialize_common_stats(stats, "Lanczos_Gnd", Maxiter, residual_tol, Tin.dtype(),
-                              working_dtype);
+                              Hop->dtype(), working_dtype);
       auto result =
         internal::lanczos_ground_state(ops, v0, is_V, residual_tol, Maxiter, verbose, &stats);
       set_last_krylov_stats(stats);
@@ -241,7 +242,7 @@ namespace cytnx {
       UniTensorLanczosOps ops(Hop, working_dtype);
       KrylovStats stats;
       initialize_common_stats(stats, "Lanczos_Gnd_Ut", Maxiter, residual_tol, Tin.dtype(),
-                              working_dtype);
+                              Hop->dtype(), working_dtype);
       auto result =
         internal::lanczos_ground_state(ops, v0, is_V, residual_tol, Maxiter, verbose, &stats);
       set_last_krylov_stats(stats);

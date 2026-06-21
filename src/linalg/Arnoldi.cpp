@@ -820,6 +820,7 @@ namespace cytnx {
       stats.cvgcrit_requested = cvg_crit;
       stats.cvgcrit_used = cvg_crit;
       stats.input_dtype = T_init.dtype();
+      stats.op_dtype = Hop->dtype();
       stats.working_dtype = _T_init.dtype();
       _Arnoldi(out, Hop, _T_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose, &stats);
       set_last_krylov_stats(stats);
@@ -871,6 +872,7 @@ namespace cytnx {
       stats.cvgcrit_requested = cvg_crit;
       stats.cvgcrit_used = cvg_crit;
       stats.input_dtype = UT_init.dtype();
+      stats.op_dtype = Hop->dtype();
       stats.working_dtype = _UT_init.dtype();
       _Arnoldi(out, Hop, _UT_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose, &stats);
       set_last_krylov_stats(stats);

@@ -25,6 +25,7 @@ namespace cytnx {
         total_stats.final_beta = stats.final_beta;
         total_stats.breakdown_tol = stats.breakdown_tol;
         total_stats.input_dtype = stats.input_dtype;
+        total_stats.op_dtype = stats.op_dtype;
         total_stats.working_dtype = stats.working_dtype;
       }
     }  // namespace

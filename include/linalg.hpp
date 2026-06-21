@@ -228,6 +228,7 @@ namespace cytnx {
       double final_beta = 0.0;
       double breakdown_tol = 0.0;
       unsigned int input_dtype = Type.Void;
+      unsigned int op_dtype = Type.Void;
       unsigned int working_dtype = Type.Void;
     };
 
@@ -2309,21 +2310,6 @@ namespace cytnx {
     Tensor Exp(const Tensor &Tin);
 
     /**
-    @brief Exponential all the element in Tensor.
-    @details This function will perform Exponential on all the elements in Tensor \p Tin.
-    That is, the output will be:
-    \f[
-        T_{o}[i] = e^{T_{i}[i]}
-    \f]
-    Note that it will cast to Float type or ComplexFloat type.
-    @param[in] Tin a Tensor
-    @return
-        [Float Tensor] or [ComplexFloat Tensor]
-
-    */
-    Tensor Expf(const Tensor &Tin);
-
-    /**
     @brief inplace perform Exponential on all the element in Tensor.
     @details This function will perform Exponential on all the elements in Tensor \p Tin.
     Furthermore,
@@ -2333,17 +2319,6 @@ namespace cytnx {
     @param[in] Tin, the input Tensor.
     */
     void Exp_(Tensor &Tin);
-
-    /**
-    @brief inplace perform Exponential on all the element in Tensor.
-    @details This function will perform Exponential on all the elements in Tensor \p Tin.
-    Furthermore,
-        1. on return, the elements in Tin will be modified to it's exponetial value.
-        2. For Real, if the type is not Float, change the type of the input tensor to Float.
-        3. For Complex, if input is ComplexDouble, promote to ComplexFloat.
-    @param[in] Tin, the input Tensor.
-    */
-    void Expf_(Tensor &Tin);
 
     // Pow:
     //==================================================
@@ -3042,7 +3017,7 @@ namespace cytnx {
     wrong results without any warning.
     */
     UniTensor Lanczos_Exp(LinOp *Hop, const cytnx::UniTensor &v, const Scalar &tau,
-                          const double &CvgCrit = 1.0e-10, const unsigned int &Maxiter = 100,
+                          const double &CvgCrit = 1.0e-8, const unsigned int &Maxiter = 100,
                           const bool &verbose = false);
 
     // Lstsq:

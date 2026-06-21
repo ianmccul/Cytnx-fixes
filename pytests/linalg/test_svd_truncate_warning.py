@@ -13,7 +13,7 @@ def _explicit_zero_cutoff(matrix):
 
 
 def _positive_cutoff(matrix):
-    cy.linalg.Svd_truncate(matrix, 2, err=1e-12)
+    cy.linalg.Svd_truncate(matrix, 2, err=1e-8)
 
 
 def test_svd_truncate_zero_cutoff_warns_once_per_line():
@@ -28,9 +28,9 @@ def test_svd_truncate_zero_cutoff_warns_once_per_line():
     assert len(caught) == 1
     assert all(warning.category is RuntimeWarning for warning in caught)
     assert all(warning.filename == __file__ for warning in caught)
-    assert "without an err cutoff" in str(caught[0].message)
-    assert "err=1e-12" in str(caught[0].message)
-    assert "numerically null singular vectors" in str(caught[0].message)
+    assert "without an explicit err cutoff" in str(caught[0].message)
+    assert "err=1e-8" in str(caught[0].message)
+    assert "numerically null or near-null singular vectors" in str(caught[0].message)
 
 
 def test_svd_truncate_zero_cutoff_warning_can_be_disabled():
@@ -51,22 +51,26 @@ def test_svd_truncate_explicit_zero_cutoff_is_rejected():
     try:
         _explicit_zero_cutoff(matrix)
     except ValueError as exc:
-        assert "err=0 is not legal" in str(exc)
-        assert "negative err" in str(exc)
+        assert "no longer accepts err=0" in str(exc)
+        assert "err=-1" in str(exc)
     else:
         raise AssertionError("Svd_truncate accepted err=0")
 
 
-def test_svd_truncate_default_cutoff_removes_null_singular_vectors():
+def test_svd_truncate_default_cutoff_removes_near_null_singular_vectors():
     matrix = cy.zeros([2, 2], dtype=cy.Type.Double)
+    matrix[0, 0] = 1.0
+    matrix[1, 1] = 1.0e-10
     cy.linalg.set_svd_truncate_warnings(True)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         default_out = cy.linalg.Svd_truncate(matrix, 2)
     negative_out = cy.linalg.Svd_truncate(matrix, 2, err=-1)
-    positive_out = cy.linalg.Svd_truncate(matrix, 2, err=1e-12)
+    loose_positive_out = cy.linalg.Svd_truncate(matrix, 2, err=1e-8)
+    tight_positive_out = cy.linalg.Svd_truncate(matrix, 2, err=1e-12)
 
     assert default_out[0].shape()[0] == 1
-    assert positive_out[0].shape()[0] == 1
+    assert loose_positive_out[0].shape()[0] == 1
+    assert tight_positive_out[0].shape()[0] == 2
     assert negative_out[0].shape()[0] == 2

@@ -651,10 +651,14 @@ TEST(Lanczos_Gnd, TensorOneDimensionalKrylovSpace) {
   EXPECT_EQ(stats.krylov_dim, 1);
   EXPECT_EQ(stats.matvec_count, 1);
   EXPECT_EQ(stats.maxiter_requested, 10);
+  EXPECT_EQ(stats.input_dtype, Type.Double);
+  EXPECT_EQ(stats.op_dtype, Type.Double);
+  EXPECT_EQ(stats.working_dtype, Type.Double);
   expect_reported_residual_consistent(stats.final_residual, residual, 1.0e-12);
   auto total_stats = linalg::krylov_stats();
   EXPECT_EQ(total_stats.matvec_count, stats.matvec_count);
   EXPECT_EQ(total_stats.krylov_dim, stats.krylov_dim);
+  EXPECT_EQ(total_stats.op_dtype, stats.op_dtype);
 }
 
 TEST(Lanczos_Gnd, UniTensorOneDimensionalKrylovSpace) {
@@ -677,6 +681,9 @@ TEST(Lanczos_Gnd, UniTensorOneDimensionalKrylovSpace) {
   EXPECT_EQ(stats.krylov_dim, 1);
   EXPECT_EQ(stats.matvec_count, 1);
   EXPECT_EQ(stats.maxiter_requested, 10);
+  EXPECT_EQ(stats.input_dtype, Type.Double);
+  EXPECT_EQ(stats.op_dtype, Type.Double);
+  EXPECT_EQ(stats.working_dtype, Type.Double);
   expect_reported_residual_consistent(stats.final_residual, residual, 1.0e-12);
 }
 

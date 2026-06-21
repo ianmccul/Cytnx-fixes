@@ -34,6 +34,7 @@ namespace cytnx {
       stats.residual_tol_used = CvgCrit;
       stats.krylov_dim = max_krydim;
       stats.input_dtype = Tin.dtype();
+      stats.op_dtype = Hop->dtype();
       stats.working_dtype = Tin.dtype();
       set_last_krylov_stats(stats);
 

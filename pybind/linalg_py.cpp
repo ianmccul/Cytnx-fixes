@@ -43,6 +43,8 @@ namespace {
     out["breakdown_tol"] = stats.breakdown_tol;
     out["input_dtype"] = stats.input_dtype;
     out["input_dtype_name"] = cytnx::Type.getname(stats.input_dtype);
+    out["op_dtype"] = stats.op_dtype;
+    out["op_dtype_name"] = cytnx::Type.getname(stats.op_dtype);
     out["working_dtype"] = stats.working_dtype;
     out["working_dtype_name"] = cytnx::Type.getname(stats.working_dtype);
     return out;
@@ -231,8 +233,6 @@ void linalg_binding(py::module &m) {
 
   m_linalg.def("Exp", &cytnx::linalg::Exp, py::arg("Tin"));
   m_linalg.def("Exp_", &cytnx::linalg::Exp_, py::arg("Tio"));
-  m_linalg.def("Expf_", &cytnx::linalg::Expf_, py::arg("Tio"));
-  m_linalg.def("Expf", &cytnx::linalg::Expf, py::arg("Tio"));
 
   // UT, [Note] no bool type!
   m_linalg.def(
@@ -1020,7 +1020,7 @@ void linalg_binding(py::module &m) {
        const unsigned int &Maxiter, const bool &verbose) {
       return cytnx::linalg::Lanczos_Exp(Hop, v, tau, CvgCrit, Maxiter, verbose);
     },
-    py::arg("Hop"), py::arg("v"), py::arg("tau"), py::arg("CvgCrit") = 1.0e-14,
+    py::arg("Hop"), py::arg("v"), py::arg("tau"), py::arg("CvgCrit") = 1.0e-8,
     py::arg("Maxiter") = 100, py::arg("verbose") = false);
 
   m_linalg.def(

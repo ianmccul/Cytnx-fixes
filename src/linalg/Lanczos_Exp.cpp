@@ -54,8 +54,34 @@ namespace cytnx {
         return std::numeric_limits<double>::epsilon();
       }
 
-      double float_cvgcrit_floor_internal() {
-        return kBetaBreakdownRoundoff * std::numeric_limits<float>::epsilon();
+      double cvgcrit_floor_internal(const unsigned int dtype) {
+        if (dtype == Type.Float || dtype == Type.ComplexFloat) {
+          return kBetaBreakdownRoundoff * std::numeric_limits<float>::epsilon();
+        }
+        return 1.0e-8;
+      }
+
+      bool should_warn_cvgcrit_floor_internal(const unsigned int dtype) {
+        static bool warned_float = false;
+        static bool warned_complex_float = false;
+        static bool warned_double = false;
+        static bool warned_complex_double = false;
+
+        bool *warned = nullptr;
+        if (dtype == Type.Float) {
+          warned = &warned_float;
+        } else if (dtype == Type.ComplexFloat) {
+          warned = &warned_complex_float;
+        } else if (dtype == Type.Double) {
+          warned = &warned_double;
+        } else if (dtype == Type.ComplexDouble) {
+          warned = &warned_complex_double;
+        }
+        if (warned == nullptr || *warned) {
+          return false;
+        }
+        *warned = true;
+        return true;
       }
 
       unsigned int krylov_matrix_dtype_internal(const unsigned int dtype) {
@@ -162,6 +188,30 @@ namespace cytnx {
           return linalg::ExpH(hp, tau_cd, cytnx_complex128(0.0, 0.0));
         }
         return linalg::ExpH(hp, static_cast<cytnx_double>(tau.real()), cytnx_double(0.0));
+      }
+
+      double krylov_exponential_error_bound_internal(const double input_norm,
+                                                     const double beta_next,
+                                                     const long double gamma_product,
+                                                     const double tau_abs,
+                                                     const cytnx_uint32 krylov_dim) {
+        // Jawecki/Auzinger/Koch 2020, Theorem 1: beta_{m+1,m} gamma_m |tau|^m / m!.
+        // The paper assumes a unit starting vector, so scale back to the input norm here.
+        if (beta_next == 0.0 || gamma_product == 0.0L || tau_abs == 0.0) {
+          return 0.0;
+        }
+        const long double log_estimate =
+          std::log(static_cast<long double>(input_norm)) +
+          std::log(static_cast<long double>(beta_next)) + std::log(gamma_product) +
+          static_cast<long double>(krylov_dim) * std::log(static_cast<long double>(tau_abs)) -
+          std::lgammal(static_cast<long double>(krylov_dim) + 1.0L);
+        if (log_estimate <= std::log(std::numeric_limits<double>::min())) {
+          return 0.0;
+        }
+        if (log_estimate >= std::log(std::numeric_limits<double>::max())) {
+          return std::numeric_limits<double>::infinity();
+        }
+        return static_cast<double>(std::exp(log_estimate));
       }
 
       Tensor resize_mat_internal(const Tensor &src, const cytnx_uint64 r, const cytnx_uint64 c) {
@@ -364,6 +414,8 @@ namespace cytnx {
         auto v = T.clone();
         auto v_nrm = std::sqrt(double(Dot_internal(v, v).real()));
         v = v / real_scalar_for_dtype_internal(v_nrm, input_dtype);
+        const double tau_abs = scalar_abs_internal(tau);
+        long double gamma_product = 1.0L;
 
         // first iteration
         auto wp = (Hop->matvec(v)).relabel_(v.labels());
@@ -419,6 +471,7 @@ namespace cytnx {
           }
           Vk.append(v.get_block_().contiguous());
           Vs.push_back(v);
+          gamma_product *= static_cast<long double>(std::abs(beta));
           Hp.at({(cytnx_uint64)i, (cytnx_uint64)i - 1}) =
             Hp.at({(cytnx_uint64)i - 1, (cytnx_uint64)i}) = beta;
           wp = (Hop->matvec(v)).relabel_(v.labels());
@@ -430,16 +483,29 @@ namespace cytnx {
           w = (wp - alpha * v - real_scalar_for_dtype_internal(beta, input_dtype) * v_old)
                 .relabel_(v.labels());
           beta_prev = beta;
+          const auto beta_next = std::sqrt(double(Dot_internal(w, w).real()));
+          const auto local_scale_next =
+            scalar_abs_internal(alpha) + std::abs(beta_next) + std::abs(beta);
+          beta_breakdown_scale = std::max(beta_breakdown_scale, std::max(local_scale_next, 1.0));
+          const auto beta_breakdown_next = kBetaBreakdownRoundoff * eps * beta_breakdown_scale *
+                                           std::sqrt(static_cast<double>(i + 1));
 
           // Converge check
           Hp_sub = resize_mat_internal(Hp, i + 1, i + 1);
           B_mat = projected_exponential_internal(Hp_sub, tau);
-          // Set the error as the element of bottom left of the exp(H_sub*tau)
-          auto error = abs(B_mat.at({(cytnx_uint64)i, 0}));
+          auto error = krylov_exponential_error_bound_internal(v_nrm, beta_next, gamma_product,
+                                                               tau_abs, i + 1);
           if (stats) {
-            stats->final_error = double(error);
-            stats->final_beta = beta;
-            stats->breakdown_tol = beta_breakdown;
+            stats->final_error = error;
+            stats->final_beta = beta_next;
+            stats->breakdown_tol = beta_breakdown_next;
+          }
+          if (beta_next <= beta_breakdown_next) {
+            if (stats) {
+              stats->converged = true;
+              stats->reason = "breakdown";
+            }
+            break;
           }
           if (error < CvgCrit) {
             if (stats) {
@@ -557,16 +623,14 @@ namespace cytnx {
 
       double _cvgcrit = CvgCrit;
 
-      if (v0.dtype() == Type.Float || v0.dtype() == Type.ComplexFloat) {
-        const double cvgcrit_floor = float_cvgcrit_floor_internal();
-        if (_cvgcrit < cvgcrit_floor) {
-          _cvgcrit = cvgcrit_floor;
-          cytnx_warning_msg(
-            true,
-            "[WARNING][Lanczos_Exp] for float precision type, CvgCrit cannot be smaller "
-            "than %.8e, and is automatically raised to this value.%s",
-            cvgcrit_floor, "\n");
-        }
+      const double cvgcrit_floor = cvgcrit_floor_internal(v0.dtype());
+      if (_cvgcrit < cvgcrit_floor) {
+        _cvgcrit = cvgcrit_floor;
+        cytnx_warning_msg(
+          should_warn_cvgcrit_floor_internal(v0.dtype()),
+          "[WARNING][Lanczos_Exp] CvgCrit cannot be smaller than %.8e for dtype %s, and is "
+          "automatically raised to this value.%s",
+          cvgcrit_floor, Type.getname(v0.dtype()).c_str(), "\n");
       }
 
       // Lanczos_Exp_Ut_internal_positive(out, Hop, v0, _cvgcrit, Maxiter, verbose);
@@ -576,6 +640,7 @@ namespace cytnx {
       stats.cvgcrit_requested = CvgCrit;
       stats.cvgcrit_used = _cvgcrit;
       stats.input_dtype = Tin.dtype();
+      stats.op_dtype = Hop->dtype();
       stats.working_dtype = v0.dtype();
 
       Lanczos_Exp_Ut_internal(out, Hop, v0, tau, output_dtype, _cvgcrit, Maxiter, verbose, &stats);

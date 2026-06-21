@@ -221,10 +221,12 @@ TEST(Lanczos, ArpackStatsAreRecorded) {
   EXPECT_EQ(stats.maxiter_requested, 100);
   EXPECT_EQ(stats.maxiter_used, 100);
   EXPECT_EQ(stats.input_dtype, Type.Double);
+  EXPECT_EQ(stats.op_dtype, Type.Double);
   EXPECT_EQ(stats.working_dtype, Type.Double);
 
   auto total_stats = linalg::krylov_stats();
   EXPECT_EQ(total_stats.matvec_count, stats.matvec_count);
+  EXPECT_EQ(total_stats.op_dtype, stats.op_dtype);
 }
 
 // 1-11, test 'is_V' is false

@@ -11,8 +11,91 @@ _KRYLOV_DIAGNOSTICS_ENV = "CYTNX_KRYLOV_DIAGNOSTICS"
 _KRYLOV_DIAGNOSTICS_FALSE = {"0", "false", "off", "no"}
 _SVD_TRUNCATE_WARNINGS_ENV = "CYTNX_SVD_TRUNCATE_WARNINGS"
 _SVD_TRUNCATE_WARNINGS_FALSE = {"0", "false", "off", "no"}
-_SVD_TRUNCATE_DEFAULT_ERR = 1e-12
+_SVD_TRUNCATE_DEFAULT_ERR = 1e-8
+_SVD_TRUNCATE_DEFAULT_ERR_TEXT = "1e-8"
 _CYTNX_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+_SVD_TRUNCATE_DEFAULT_WARNING = """
+cytnx.linalg.Svd_truncate was called without an explicit err cutoff.
+
+This fixes branch changes the Python default to:
+
+    err={err}
+
+This removes numerically null or near-null singular vectors. For typical
+double-precision MPS/TDVP calculations this corresponds to discarded state
+weight around 1e-16, while removing basis directions that are not numerically
+meaningful. Removing near-null singular vectors is especially important for
+TDVP and other tangent-space algorithms, where such directions can corrupt the
+tangent-space projector and give wrong results.
+
+If you are only canonicalizing an MPS and do not need singular values, prefer:
+
+    cytnx.linalg.Qr(...)    # left-canonicalization
+    cytnx.linalg.Lq(...)    # right-canonicalization
+
+If you want singular values but do not want truncation, use:
+
+    cytnx.linalg.Svd(...)
+    cytnx.linalg.Gesvd(...)
+
+If you deliberately want to keep null singular vectors, pass a negative cutoff:
+
+    cytnx.linalg.Svd_truncate(T, keepdim, err=-1)
+
+This warning is shown once per Python call site. You can silence it globally:
+
+    cytnx.linalg.set_svd_truncate_warnings(False)
+
+or with the environment variable:
+
+    export CYTNX_SVD_TRUNCATE_WARNINGS=0
+
+The best long-term fix is to pass an explicit cutoff at every call site, for
+example:
+
+    cytnx.linalg.Svd_truncate(T, keepdim, err={err})
+""".strip()
+_SVD_TRUNCATE_ZERO_ERROR = """
+cytnx.linalg.Svd_truncate no longer accepts err=0 from Python.
+
+The value err=0 is ambiguous and unsafe. In most tensor-network code, a call to
+Svd_truncate means either:
+
+1. truncate an MPS bond using a singular-value cutoff; or
+2. canonicalize a tensor network bond.
+
+For case 1, keeping numerically null singular vectors is usually wrong. It is
+particularly dangerous in TDVP and other tangent-space algorithms, because the
+null-space basis enters the projector. An arbitrary numerical null-space basis
+can therefore change the algorithm.
+
+For case 2, Svd_truncate is usually the wrong tool. If you only want
+canonicalization and do not need singular values, prefer:
+
+    cytnx.linalg.Qr(...)    # left-canonicalization
+    cytnx.linalg.Lq(...)    # right-canonicalization
+
+If you want singular values but do not want truncation, use:
+
+    cytnx.linalg.Svd(...)
+    cytnx.linalg.Gesvd(...)
+
+If you are using Svd_truncate to truncate an MPS bond, the MPS must already be
+canonical at that bond. Then choose one of these explicit meanings:
+
+    err=1e-8
+        Remove numerical zero and near-zero singular values. This corresponds
+        to discarded state weight around 1e-16 and is the recommended default
+        for double-precision MPS/TDVP-style calculations.
+
+    err=<positive cutoff>
+        Apply your own positive singular-value cutoff.
+
+    err=-1
+        Keep every singular vector, including numerically zero vectors. Use
+        this only if you have checked that the null-space basis cannot affect
+        later calculations.
+""".strip()
 
 
 def _env_krylov_diagnostics_enabled():
@@ -197,6 +280,15 @@ def _valid_dtype_id(dtype):
     return dtype is not None and dtype != getattr(Type, "Void", None)
 
 
+def _dtype_is_complex(dtype):
+    if not _valid_dtype_id(dtype):
+        return False
+    try:
+        return bool(Type.is_complex(dtype))
+    except Exception:
+        return False
+
+
 def _krylov_diagnostic_label(stats, args, kwargs):
     method = _method_arg(args, kwargs)
     if isinstance(method, str):
@@ -225,13 +317,22 @@ def _user_stop_reason(reason):
 
 def _format_krylov_diagnostics(stats, args, kwargs, result):
     fields = [f"{_krylov_diagnostic_label(stats, args, kwargs)}:"]
-    _append_stat_field(fields, "E", _first_scalar_text(_eigenvalue_object(result)))
-    residual = stats.get("final_residual")
-    residual_tol = stats.get("residual_tol_used")
-    if residual is not None and residual_tol is not None:
-        fields.append(f"res={_format_float_like(residual)}/{_format_float_like(residual_tol)}")
+    algorithm = stats.get("algorithm")
+    if algorithm == "Lanczos_Exp":
+        final_error = stats.get("final_error")
+        cvgcrit = stats.get("cvgcrit_used")
+        if final_error is not None and cvgcrit is not None:
+            fields.append(f"err={_format_float_like(final_error)}/{_format_float_like(cvgcrit)}")
+        else:
+            _append_stat_field(fields, "err", final_error)
     else:
-        _append_stat_field(fields, "res", residual)
+        _append_stat_field(fields, "E", _first_scalar_text(_eigenvalue_object(result)))
+        residual = stats.get("final_residual")
+        residual_tol = stats.get("residual_tol_used")
+        if residual is not None and residual_tol is not None:
+            fields.append(f"res={_format_float_like(residual)}/{_format_float_like(residual_tol)}")
+        else:
+            _append_stat_field(fields, "res", residual)
     _append_stat_field(fields, "matvecs", stats.get("matvec_count"))
     _append_stat_field(fields, "k", stats.get("krylov_dim"))
     _append_stat_field(fields, "nx", _hop_nx(args, kwargs))
@@ -249,18 +350,43 @@ def _format_krylov_diagnostics(stats, args, kwargs, result):
 
 def _format_krylov_dtype_warnings(stats, result):
     warnings = []
+    algorithm = stats.get("algorithm")
     input_dtype = stats.get("input_dtype")
+    op_dtype = stats.get("op_dtype")
     working_dtype = stats.get("working_dtype")
-    output_dtype = _result_object_dtype_id(_output_vector_object(result))
+    output_dtype = None if algorithm == "Lanczos_Exp" else _result_object_dtype_id(
+        _output_vector_object(result)
+    )
     input_dtype_name = stats.get("input_dtype_name")
+    op_dtype_name = stats.get("op_dtype_name")
     working_dtype_name = stats.get("working_dtype_name")
     output_dtype_name = _dtype_name_from_id(output_dtype)
-    if _valid_dtype_id(input_dtype) and _valid_dtype_id(working_dtype) and working_dtype != input_dtype:
+    linop_complex_promoted_real_input = (
+        _valid_dtype_id(input_dtype)
+        and _valid_dtype_id(op_dtype)
+        and _valid_dtype_id(working_dtype)
+        and not _dtype_is_complex(input_dtype)
+        and _dtype_is_complex(op_dtype)
+        and _dtype_is_complex(working_dtype)
+    )
+    if linop_complex_promoted_real_input:
+        warnings.append(
+            f"[cytnx] WARNING: LinOp dtype hint {op_dtype_name} promoted real input dtype "
+            f"{input_dtype_name} to complex working dtype {working_dtype_name}. If this LinOp "
+            "represents a real operator, construct it with a real dtype hint to avoid unnecessary "
+            "complex arithmetic."
+        )
+    elif _valid_dtype_id(input_dtype) and _valid_dtype_id(working_dtype) and working_dtype != input_dtype:
         warnings.append(
             f"[cytnx] WARNING: Lanczos working dtype changed: {input_dtype_name} -> "
             f"{working_dtype_name}."
         )
-    if _valid_dtype_id(input_dtype) and _valid_dtype_id(output_dtype) and output_dtype != input_dtype:
+    if (
+        algorithm != "Lanczos_Exp"
+        and _valid_dtype_id(input_dtype)
+        and _valid_dtype_id(output_dtype)
+        and output_dtype != input_dtype
+    ):
         warnings.append(
             f"[cytnx] WARNING: Lanczos returned vector dtype {output_dtype_name} from input dtype "
             f"{input_dtype_name}."
@@ -304,6 +430,9 @@ def _print_krylov_diagnostics(args, kwargs, result):
 
 
 _native_Lanczos = getattr(_cytnx.linalg.Lanczos, "__cytnx_native_lanczos__", _cytnx.linalg.Lanczos)
+_native_Lanczos_Exp = getattr(
+    _cytnx.linalg.Lanczos_Exp, "__cytnx_native_lanczos_exp__", _cytnx.linalg.Lanczos_Exp
+)
 
 
 def Lanczos(*args, **kwargs):
@@ -339,6 +468,20 @@ def Lanczos(*args, **kwargs):
 
 Lanczos.__cytnx_native_lanczos__ = _native_Lanczos
 _cytnx.linalg.Lanczos = Lanczos
+
+
+def Lanczos_Exp(*args, **kwargs):
+    result = _native_Lanczos_Exp(*args, **kwargs)
+    if _krylov_diagnostics_enabled:
+        try:
+            _print_krylov_diagnostics(args, kwargs, result)
+        except Exception as exc:
+            warnings.warn(f"Failed to print Cytnx Krylov diagnostics: {exc}", RuntimeWarning)
+    return result
+
+
+Lanczos_Exp.__cytnx_native_lanczos_exp__ = _native_Lanczos_Exp
+_cytnx.linalg.Lanczos_Exp = Lanczos_Exp
 _cytnx.linalg.set_krylov_diagnostics = set_krylov_diagnostics
 _cytnx.linalg.get_krylov_diagnostics = get_krylov_diagnostics
 
@@ -401,14 +544,7 @@ def _warn_svd_truncate_default_cutoff(args, kwargs):
     if site in _svd_truncate_warning_sites:
         return
     _svd_truncate_warning_sites.add(site)
-    message = (
-        "cytnx.linalg.Svd_truncate was called without an err cutoff; using "
-        f"err={_SVD_TRUNCATE_DEFAULT_ERR:g}. This removes numerically null singular vectors, "
-        "which is usually the intended behavior for canonicalization and "
-        "TDVP/tangent-space algorithms. Pass an explicit positive err to choose "
-        "a different cutoff, or pass a negative err if you really want to keep "
-        "all singular vectors including numerically zero vectors."
-    )
+    message = _SVD_TRUNCATE_DEFAULT_WARNING.format(err=_SVD_TRUNCATE_DEFAULT_ERR_TEXT)
     warnings.warn_explicit(message, RuntimeWarning, filename, lineno)
 
 
@@ -420,13 +556,7 @@ def _svd_truncate_checked_args(args, kwargs):
         kwargs["err"] = _SVD_TRUNCATE_DEFAULT_ERR
         return args, kwargs
     if _is_zero_cutoff(err):
-        raise ValueError(
-            "cytnx.linalg.Svd_truncate err=0 is not legal because it is ambiguous: "
-            "it does not remove numerically null singular vectors. Use err=1e-12 "
-            "as a safe cutoff for numerical zero singular values, choose another "
-            "positive cutoff explicitly, or pass a negative err if you really want "
-            "to keep all singular vectors including numerically zero vectors."
-        )
+        raise ValueError(_SVD_TRUNCATE_ZERO_ERROR)
     if _is_negative_cutoff(err):
         return args, kwargs
     return args, kwargs
