@@ -31,6 +31,7 @@ Branch `fixes/general` adds:
 * `d3a4a93c` Extend Krylov diagnostics to Lanczos_Exp
 * `bf1e95f4` Fix Lanczos_Exp convergence estimate
 * `b08bc731` Test LinOp matvec dimension checks
+* `c39dde5a` Make LinOp dtype and device metadata immutable
 
 Visible changes for Python users:
 
@@ -65,6 +66,7 @@ Visible changes for Python users:
   * `cytnx.Type.enum_name(dtype)`
 * Krylov routines have stricter `LinOp` size checking. Calls through Cytnx linalg routines check that `LinOp.matvec()` input and output vectors match the declared `nx()` dimension. Python code that set `nx()` incorrectly will now cause an error. This can be fixed by setting the `nx` parameter correctly when constructing the `LinOp`.
 * It is no longer necessary to set the dtype of a real-valued `LinOp` to `ComplexDouble` or `ComplexFloat` just because the input vector might be complex. This particularly affects TDVP code where the Hamiltonian is real but the timestep might be real or complex. Previous Cytnx would require the `LinOp` dtype of a real Hamiltonian to be complex in order to use it with a complex timestep. This is no longer the case. The dtype is instead treated as a type promotion hint.
+* `LinOp` dtype and device metadata are fixed at construction time. The C++ `set_dtype()` and `set_device()` mutators have been removed. The Python methods remain as compatibility stubs, but now raise explicit errors explaining that changing metadata would not change the actual matrix-free `matvec()` implementation.
 * `cytnx.linalg.Lanczos_Exp()` now warns if the input tensor has higher precision than the `LinOp` dtype hint, for example a Double input tensor with a Float `LinOp`. This usually means the Krylov basis will use the promoted dtype, but the operator action may still only carry single-precision information.
 * The old `cytnx.linalg.Lanczos(..., method="ER")` function has been removed. An attempt to call `method=ER` raises an error explaining what to use instead. For ordinary Hermitian eigenvalue problems, use the ARPACK-backed interface such as `cytnx.linalg.Lanczos(Hop, Tin, which="SA")` for the smallest algebraic eigenvalue. If you *really* want a Lanczos function with explicit restarts, then call `cytnx.linalg.Lanczos(..., method="Gnd")` in a loop. This will work better than the old `"ER"` method, but not as well as ARPACK.
 * `cytnx.linalg.Lanczos(..., method="Gnd")` has been reworked to be a simple but numerically stable Lanczos solver. It is intended for iterative algorithms where convergence is achieved through multiple passes of environment updates and the number of eigensolver iterations in each pass is kept deliberately low. It is expected and normal with this mode that during the early stages of the calculation the convergence criteria might not be met before `Maxiter` is reached. The default `Maxiter` is now `20`; requests that would build more than `100` Krylov vectors are capped and warned, since a non-restarted Lanczos will be numerically unstable for a large number of iterations. For DMRG applications, 4 or 5 iterations is probably appropriate.
