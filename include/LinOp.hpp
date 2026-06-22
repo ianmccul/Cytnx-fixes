@@ -69,13 +69,8 @@ namespace cytnx {
       this->_device = device;
     };
 
-    void set_dtype(const unsigned int &dtype) { this->_dtype = dtype; }
     unsigned int dtype() const { return this->_dtype; }
 
-    void set_device(const int &device) {
-      cytnx_error_msg(device < -1 || device >= Device.Ngpus, "[ERROR] invalid device.%s", "\n");
-      this->_device = device;
-    };
     int device() const { return this->_device; };
     cytnx_uint64 nx() const { return this->_nx; };
 

@@ -1,6 +1,7 @@
 #include <vector>
 #include <map>
 #include <random>
+#include <stdexcept>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -53,7 +54,16 @@ void linop_binding(py::module &m) {
            return new PyLinOp(type, nx, dtype_hint, device);
          }),
          py::arg("type"), py::arg("nx"), py::arg("dtype"), py::arg("device") = (int)Device.cpu)
-    .def("set_dtype", &LinOp::set_dtype)
+    .def(
+      "set_dtype",
+      [](LinOp &, const unsigned int &) {
+        throw std::runtime_error(
+          "[ERROR][LinOp] set_dtype() is no longer supported. LinOp dtype is constructor metadata "
+          "describing the operator coefficient dtype hint; changing it after construction would "
+          "not "
+          "change the actual matvec implementation.");
+      },
+      py::arg("dtype"))
     .def("dtype", &LinOp::dtype)
     .def(
       "matvec", [](LinOp &self, const Tensor &Tin) -> Tensor { return self.matvec(Tin); },
@@ -61,7 +71,16 @@ void linop_binding(py::module &m) {
     .def(
       "matvec", [](LinOp &self, const UniTensor &Tin) -> UniTensor { return self.matvec(Tin); },
       py::arg("Tin"))
-    .def("set_device", &LinOp::set_device)
+    .def(
+      "set_device",
+      [](LinOp &, const int &) {
+        throw std::runtime_error(
+          "[ERROR][LinOp] set_device() is no longer supported. LinOp device is constructor "
+          "metadata; moving a matrix-free operator to another device requires moving the "
+          "underlying "
+          "operator data and matvec implementation, not just changing metadata.");
+      },
+      py::arg("device"))
     .def("device", &LinOp::device)
     .def("nx", &LinOp::nx)
     .def(
