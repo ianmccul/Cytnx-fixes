@@ -118,6 +118,29 @@ namespace Lanczos_Exp_Ut_Test {
     double coupling12_;
   };
 
+  // A 3-site Hermitian chain (couples 0-1-2) whose Krylov space starting from e0 is the
+  // full 3-dimensional space, exhausted at k=3. dtype-parametrised so it can exercise the
+  // float convergence path.
+  class ChainOp3 : public LinOp {
+   public:
+    ChainOp3(const double coupling01, const double coupling12,
+             const unsigned int dtype = Type.Double)
+        : LinOp("mv", 3, dtype, Device.cpu), coupling01_(coupling01), coupling12_(coupling12) {}
+
+    UniTensor matvec_impl(const UniTensor& A) override {
+      auto out = UniTensor::zeros(A.shape(), A.labels(), A.dtype(), A.device());
+      out.set_rowrank_(A.rowrank());
+      out.at({0, 0}) = coupling01_ * A.at({1, 0});
+      out.at({1, 0}) = coupling01_ * A.at({0, 0}) + coupling12_ * A.at({2, 0});
+      out.at({2, 0}) = coupling12_ * A.at({1, 0});
+      return out;
+    }
+
+   private:
+    double coupling01_;
+    double coupling12_;
+  };
+
   double FloatLanczosExpTolerance() { return 100.0 * std::numeric_limits<float>::epsilon(); }
 
   UniTensor SmallResidualInitialState(const unsigned int dtype) {
@@ -356,6 +379,73 @@ namespace Lanczos_Exp_Ut_Test {
 
     EXPECT_EQ(x.dtype(), Type.ComplexFloat);
     EXPECT_LE(err, FloatLanczosExpTolerance());
+  }
+
+  // A requested CvgCrit below the dtype-dependent orthogonality floor (~sqrt(eps)) must be
+  // clamped up to that floor, because a non-reorthogonalized Lanczos basis cannot deliver
+  // accuracy below sqrt(eps). The clamped value is reported through last_krylov_stats().
+  // Maxiter (2) < nx (3) so the Krylov space is not exhaustible within the budget and the
+  // floor genuinely applies (see FloatFullKrylovSpaceReachedDespiteFloor for the
+  // exhaustible case, where the floor must NOT clamp).
+  TEST(Lanczos_Exp_Ut, ConvergenceCriterionClampedToOrthogonalityFloor) {
+    const double tiny_request = 1.0e-30;
+    const double tau = 0.1;
+    const unsigned int maxiter = 2;
+
+    // Double: floor is kept at the round 1e-8 (~ sqrt(double eps) = 1.49e-8).
+    {
+      SmallResidualOp op(5.0e-5, Type.Double);
+      auto Tin = SmallResidualInitialState(Type.Double);
+      linalg::clear_krylov_stats();
+      linalg::Lanczos_Exp(&op, Tin, tau, tiny_request, maxiter);
+      auto stats = linalg::last_krylov_stats();
+      EXPECT_DOUBLE_EQ(stats.cvgcrit_requested, tiny_request);
+      EXPECT_DOUBLE_EQ(stats.cvgcrit_used, 1.0e-8);
+    }
+
+    // Float: floor is sqrt(float eps) ~ 3.45e-4, not the old roundoff scale 100*eps.
+    {
+      SmallResidualOp op(5.0e-5, Type.Float);
+      auto Tin = SmallResidualInitialState(Type.Float);
+      linalg::clear_krylov_stats();
+      linalg::Lanczos_Exp(&op, Tin, tau, tiny_request, maxiter);
+      auto stats = linalg::last_krylov_stats();
+      const double expected_floor =
+        std::sqrt(static_cast<double>(std::numeric_limits<float>::epsilon()));
+      EXPECT_DOUBLE_EQ(stats.cvgcrit_used, expected_floor);
+      EXPECT_GT(stats.cvgcrit_used, 100.0 * std::numeric_limits<float>::epsilon());
+    }
+  }
+
+  // Regression (codex review of the sqrt(eps) float floor): the floor must not stop a solve
+  // before the Krylov space is exhausted when the full space is still reachable. The 3-site
+  // chain from e0 reaches the whole space at k=3; with tau=0.02 the k=2 error bound
+  // ~ tau^2/2 = 2e-4 sits below the float floor (3.45e-4), so a naive clamp would converge
+  // at k=2 and omit the ~2e-4 third component instead of continuing to the exact answer.
+  TEST(Lanczos_Exp_Ut, FloatFullKrylovSpaceReachedDespiteFloor) {
+    const double c = 1.0;
+    const double tau = 0.02;
+    const unsigned int maxiter = 3;  // == nx: the full Krylov space is exhaustible
+    ChainOp3 op(c, c, Type.Float);
+    auto Tin = SmallResidualInitialState(Type.Float);  // e0 = [1,0,0]
+
+    linalg::clear_krylov_stats();
+    auto x = linalg::Lanczos_Exp(&op, Tin, tau, 1.0e-8, maxiter);
+    auto stats = linalg::last_krylov_stats();
+
+    // Reference: dense float matrix exponential of the same operator applied to e0.
+    auto H = zeros({3, 3}, Type.Float);
+    H.at<cytnx_float>({0, 1}) = c;
+    H.at<cytnx_float>({1, 0}) = c;
+    H.at<cytnx_float>({1, 2}) = c;
+    H.at<cytnx_float>({2, 1}) = c;
+    auto ref =
+      UniTensor(linalg::Matmul(linalg::ExpH(H, tau), Tin.get_block()), false, Tin.rowrank());
+    const auto err = static_cast<double>((x - ref).Norm().item().real());
+
+    EXPECT_EQ(x.dtype(), Type.Float);
+    EXPECT_EQ(stats.krylov_dim, 3u);  // full space reached, not truncated at k=2
+    EXPECT_LT(err, 5.0e-5);           // ~float precision, not the ~2e-4 truncation error
   }
 
   TEST(Lanczos_Exp_Ut, FloatComplexTauReturnsComplexFloat) {
