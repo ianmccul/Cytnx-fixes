@@ -633,8 +633,14 @@ namespace cytnx {
 
       double _cvgcrit = CvgCrit;
 
+      // The sqrt(eps) floor reflects the accuracy limit of a *non-reorthogonalized* Lanczos
+      // basis, which only sets in after orthogonality is lost over many iterations. If the
+      // full Krylov space is reachable within Maxiter (Maxiter >= nx), the solve can still
+      // reach the exact full-space exponential by exhausting the space, so the floor must
+      // not clamp the request and force premature convergence at k < nx (codex review).
       const double cvgcrit_floor = cvgcrit_floor_internal(v0.dtype());
-      if (_cvgcrit < cvgcrit_floor) {
+      const bool krylov_space_exhaustible = Maxiter >= Hop->nx();
+      if (!krylov_space_exhaustible && _cvgcrit < cvgcrit_floor) {
         _cvgcrit = cvgcrit_floor;
         cytnx_warning_msg(
           should_warn_cvgcrit_floor_internal(v0.dtype()),
