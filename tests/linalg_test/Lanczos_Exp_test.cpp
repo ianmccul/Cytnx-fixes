@@ -358,6 +358,39 @@ namespace Lanczos_Exp_Ut_Test {
     EXPECT_LE(err, FloatLanczosExpTolerance());
   }
 
+  // A requested CvgCrit below the dtype-dependent orthogonality floor (~sqrt(eps)) must be
+  // clamped up to that floor, because a non-reorthogonalized Lanczos basis cannot deliver
+  // accuracy below sqrt(eps). The clamped value is reported through last_krylov_stats().
+  TEST(Lanczos_Exp_Ut, ConvergenceCriterionClampedToOrthogonalityFloor) {
+    const double tiny_request = 1.0e-30;
+    const double tau = 0.1;
+    const unsigned int maxiter = 3;
+
+    // Double: floor is kept at the round 1e-8 (~ sqrt(double eps) = 1.49e-8).
+    {
+      SmallResidualOp op(5.0e-5, Type.Double);
+      auto Tin = SmallResidualInitialState(Type.Double);
+      linalg::clear_krylov_stats();
+      linalg::Lanczos_Exp(&op, Tin, tau, tiny_request, maxiter);
+      auto stats = linalg::last_krylov_stats();
+      EXPECT_DOUBLE_EQ(stats.cvgcrit_requested, tiny_request);
+      EXPECT_DOUBLE_EQ(stats.cvgcrit_used, 1.0e-8);
+    }
+
+    // Float: floor is sqrt(float eps) ~ 3.45e-4, not the old roundoff scale 100*eps.
+    {
+      SmallResidualOp op(5.0e-5, Type.Float);
+      auto Tin = SmallResidualInitialState(Type.Float);
+      linalg::clear_krylov_stats();
+      linalg::Lanczos_Exp(&op, Tin, tau, tiny_request, maxiter);
+      auto stats = linalg::last_krylov_stats();
+      const double expected_floor =
+        std::sqrt(static_cast<double>(std::numeric_limits<float>::epsilon()));
+      EXPECT_DOUBLE_EQ(stats.cvgcrit_used, expected_floor);
+      EXPECT_GT(stats.cvgcrit_used, 100.0 * std::numeric_limits<float>::epsilon());
+    }
+  }
+
   TEST(Lanczos_Exp_Ut, FloatComplexTauReturnsComplexFloat) {
     const double coupling = 5.0e-5;
     SmallResidualOp op(coupling, Type.Float);
