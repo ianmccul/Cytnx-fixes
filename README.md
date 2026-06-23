@@ -10,6 +10,12 @@ The branch `fixes/general` contains the main material on this repository. This b
 
 See [Cytnx-fixes issue #1](https://github.com/ianmccul/Cytnx-fixes/issues/1) for a survey of upstream Cytnx issues that this branch either fixes directly, probably fixes, or makes easier to diagnose.
 
+## Known unresolved arithmetic problems
+
+This repository does not yet fix Cytnx's general mixed-dtype arithmetic system. In particular, mixed integer/floating-point, signed/unsigned, bool, and mixed precision real/complex arithmetic can still produce incorrect results. Some in-place arithmetic paths are especially dangerous because they preserve the destination dtype, so operations such as integer tensor divided by double tensor can silently truncate the result. Some GPU paths are worse and appear capable of writing through pointers cast to the wrong output type.
+
+The `fixes/general` branch should therefore be used for floating-point tensor-network calculations, especially the Krylov, TDVP, DMRG, and SVD-related fixes described below. It should not be treated as a general validation of Cytnx integer, bool, or mixed-dtype arithmetic. Until this is fixed, avoid integer/bool tensor arithmetic and avoid mixed-dtype in-place arithmetic in user code.
+
 Branch `fixes/general` adds:
 
 * `34aa230a` Fix Exp dtype-changing paths and remove Expf
