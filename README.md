@@ -14,7 +14,21 @@ See [Cytnx-fixes issue #1](https://github.com/ianmccul/Cytnx-fixes/issues/1) for
 
 This repository does not yet fix Cytnx's general mixed-dtype arithmetic system. In particular, mixed integer/floating-point, signed/unsigned, bool, and mixed precision real/complex arithmetic can still produce incorrect results. Some in-place arithmetic paths are especially dangerous because they preserve the destination dtype, so operations such as integer tensor divided by double tensor can silently truncate the result. Some GPU paths are worse and appear capable of writing through pointers cast to the wrong output type.
 
-The `fixes/general` branch should therefore be used for floating-point tensor-network calculations, especially the Krylov, TDVP, DMRG, and SVD-related fixes described below. It should not be treated as a general validation of Cytnx integer, bool, or mixed-dtype arithmetic. Until this is fixed, avoid integer/bool tensor arithmetic and avoid mixed-dtype in-place arithmetic in user code.
+A known problem, and essentially unfixable, is that mixed arithmetic between `Double` and `ComplexFloat` promotes to the incorrect and precision-losing `ComplexFloat` instead of `ComplexDouble`. The only fix for this is to convert both arguments to `Double/ComplexDouble` before any arithmetic operations.
+
+There are many known bugs in Cytnx mixed signed/unsigned and integer/floating-point arithmetic. Avoid in-place arithmetic at all costs; for example, instead of
+```Python
+a /= b
+```
+use
+```Python
+a = a / b
+```
+Likewise, avoid `+=`, `-=`, `*=` etc.
+
+I might attempt some mitigations for these errors if I hear reports of affected user code. Until this is fixed, avoid integer/bool tensor arithmetic and avoid mixed-dtype in-place arithmetic in user code.
+
+The main focus for this branch is fixing the worst of the numerical algorithm problems. The `fixes/general` branch should therefore be used for floating-point tensor-network calculations, especially the Krylov, TDVP, DMRG, and SVD-related fixes described below.
 
 Branch `fixes/general` adds:
 
