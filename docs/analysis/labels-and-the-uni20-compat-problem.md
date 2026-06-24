@@ -58,7 +58,7 @@ Even setting the semantics aside, the spelling is a mess, and has been for the p
 
 ## The through-line
 
-This is exactly the point made in #933: "labels should not be treated as the canonical mathematical identity of a leg ... Cytnx labels are too easy to relabel accidentally." Everywhere else in Cytnx the debt is implementation quality — the intended semantics are fine and one can shrink toward them. The label system is the exception: the **intended semantics are themselves the problem**, and they are woven into both contraction and defensive user code (scripts are full of relabels precisely because labels are fragile). That defensive code is the most quirk-coupled code in any Cytnx program, and it is exactly what a shim would most need to reproduce faithfully.
+This is the label-specific obstacle behind the broader compatibility concern raised in #933. Everywhere else in Cytnx the debt is implementation quality — the intended semantics are fine and one can shrink toward them. The label system is the exception: the **intended semantics are themselves the problem**, and they are woven into both contraction and defensive user code (scripts are full of relabels precisely because labels are fragile). That defensive code is the most quirk-coupled code in any Cytnx program, and it is exactly what a shim would most need to reproduce faithfully.
 
 ## Conclusion
 
@@ -90,6 +90,6 @@ This rests on an inference about uni20's leg-identity model, which I have not se
 
 **Design paper:** Wu et al., *The Cytnx Library for Tensor Networks*, SciPost Phys. Codebases (2023): §1.1 (labels make ordering automatic), §4 (Bond = dim + direction + qnums), §5/Fig. 5 (UniTensor = Block/Bond/Label), §5.3 (position+label; labels survive permute), §7 (ncon order matters), §9.1 (permute + set rowrank before decomposition), §9.2/Listing 60 (auto-generated `_aux` labels).
 
-**Issues — semantics:** #753 (arithmetic resets labels), #675 (copy labels in elementwise arithmetic, open), #408 (slicing doesn't inherit labels), #310 (network output label inheritance), #920 (duplicate `_aux_L` crashes MPS), #337 (index order after Contract), #933 (labels are not canonical leg identity).
+**Issues — semantics:** #753 (arithmetic resets labels), #675 (copy labels in elementwise arithmetic, open), #408 (slicing doesn't inherit labels), #310 (network output label inheritance), #920 (duplicate `_aux_L` crashes MPS), #337 (index order after Contract), #933 (Cytnx-to-uni20 Python compatibility discussion).
 
 **Issues — API redundancy:** #481, #421, #335, #465 (open); #33, #184, #228, #232, #286 (closed, historical).
