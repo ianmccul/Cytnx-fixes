@@ -1,0 +1,8 @@
+# Analysis notes
+
+These documents are project-level analysis notes for the `Cytnx-fixes` repository and the upstream `Cytnx-dev/Cytnx` project. They are not user-guide documentation.
+
+- [`cytnx-maintenance-strategy.md`](cytnx-maintenance-strategy.md): proposed maintenance strategy for upstream Cytnx.
+- [`labels-and-the-uni20-compat-problem.md`](labels-and-the-uni20-compat-problem.md): why Cytnx `UniTensor` labels complicate a uni20 compatibility layer.
+- [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md): static scan of upstream Cytnx technical debt.
+- [`FIXES_BRANCH_ANALYSIS.md`](FIXES_BRANCH_ANALYSIS.md): snapshot analysis of the `fixes/general` branch and possible upstreaming paths.
