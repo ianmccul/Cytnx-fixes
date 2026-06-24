@@ -14,6 +14,20 @@ A compatibility shim works when the **surface API** differs but the **semantics*
 
 Labels are not decoration. Contraction matches legs by label — this is the basis of `Contract`, `ncon`, and `Network` (see #310 "Network output label inheritance", #337 "index order after Contract"). The label string is the mathematical identity that decides which legs join. That single design choice is the root of everything below.
 
+## What the design paper says
+
+The Cytnx design paper (Wu et al., "The Cytnx Library for Tensor Networks", SciPost Phys. Codebases, 2023) documents the label model. Read against the operations Cytnx later grew, it exposes five structural problems:
+
+1. **Labels are a separate component, not a property of `Bond`.** §5 / Fig. 5 defines a `UniTensor` as three parts — `Block(s)`, `Bond(s)`, **and** `Label(s)`. §5.3: "two important attributes are defined for each index: its position and label." So a leg's identity is split across its position, a `Bond` (which carries the physics — dimension, direction, quantum numbers), and a free-floating label string that the `Bond` knows nothing about. The code agrees: `_labels` is a standalone `std::vector<std::string>` on `UniTensor_base`, parallel to the bonds, not a field inside `Bond`.
+
+2. **The stated design goal is "labels let you ignore index order."** §1.1: *"Once meaningful index labels are set, the ordering and permutation of the indices in tensors can be handled by the library automatically."* §5.3: *"the same labels can still be used to find the correct index even after a permutation. Therefore, all methods that use index labels do not need to be changed after a permutation."* This is the founding premise, and it conflicts with later parts of the library.
+
+3. **The paper itself documents the order/identity contradiction as a manual requirement.** §9.1: before any decomposition the user must *"1) permute the indices such that all the row indices are in front of all the column indices, and 2) set rowrank."* So SVD / Eig / QR depend on **position + rowrank**, never on labels. §7 also warns, of `ncon`, that *"the index order matters ... This can be error prone."* The library knows order matters for linear algebra; it just places that responsibility on the user rather than recognising that it now has two incompatible notions of leg identity. This is exactly `A['l','s','r']` ≡ `A['r','s','l']` to `Contract` but ≠ to `Svd`.
+
+4. **The #920 crash follows the documented idiom.** §9.2 / Listing 60: SVD output legs get auto-generated labels (*"U inherits the row labels ... the other labels are automatically generated"*), then are manually `relabels_`'d to `"_aux_L"` / `"_aux_R"`. That auto-name-then-relabel pattern is precisely what collides across successive SVDs and aborts MPS construction (#920).
+
+5. **Braiding is invisible to the design by construction.** The paper does not describe braiding or fermionic signs; its first principle ("order is ignorable") conflicts with the thing fermions require — that permuting legs can carry a sign. `BlockFermionicUniTensor` was added later onto a model whose label semantics do not encode the information needed to make this reliable.
+
 ## Three structural facts that form the trap
 
 **1. Leg identity is a mutable, uniqueness-constrained string namespace.**
@@ -72,7 +86,9 @@ This rests on an inference about uni20's leg-identity model, which I have not se
 
 ### Appendix: references
 
-**Code:** `include/UniTensor.hpp:193` (uniqueness error in `set_label`); `src/DenseUniTensor.cpp:210-217` (`relabel` shares `_block`, forks labels); the `relabel`/`relabels`/`set_label*` overload cluster in `include/UniTensor.hpp` (lines ~156–214, ~2900–2995).
+**Code:** `include/UniTensor.hpp:193` (uniqueness error in `set_label`); `src/DenseUniTensor.cpp:210-217` (`relabel` shares `_block`, forks labels); the `relabel`/`relabels`/`set_label*` overload cluster in `include/UniTensor.hpp` (lines ~156–214, ~2900–2995); `_labels` is a `std::vector<std::string>` on `UniTensor_base` (separate from bonds). `include/Bond.hpp`: `Bond_impl` holds `_dim`, `_type` (`BD_REG`/`BD_KET`/`BD_BRA`), `_qnums`, `_degs`, `_syms`, plus `get_fermion_parity()`.
+
+**Design paper:** Wu et al., *The Cytnx Library for Tensor Networks*, SciPost Phys. Codebases (2023): §1.1 (labels make ordering automatic), §4 (Bond = dim + direction + qnums), §5/Fig. 5 (UniTensor = Block/Bond/Label), §5.3 (position+label; labels survive permute), §7 (ncon order matters), §9.1 (permute + set rowrank before decomposition), §9.2/Listing 60 (auto-generated `_aux` labels).
 
 **Issues — semantics:** #753 (arithmetic resets labels), #675 (copy labels in elementwise arithmetic, open), #408 (slicing doesn't inherit labels), #310 (network output label inheritance), #920 (duplicate `_aux_L` crashes MPS), #337 (index order after Contract), #933 (labels are not canonical leg identity).
 
