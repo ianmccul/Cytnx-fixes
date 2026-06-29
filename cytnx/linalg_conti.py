@@ -242,18 +242,6 @@ def _first_scalar_text(obj):
     return None
 
 
-def _hop_nx(args, kwargs):
-    hop = kwargs.get("Hop")
-    if hop is None and args:
-        hop = args[0]
-    if hop is None:
-        return None
-    try:
-        return hop.nx()
-    except Exception:
-        return None
-
-
 def _format_stat_value(value):
     if isinstance(value, float):
         return f"{value:.6g}"
@@ -335,7 +323,6 @@ def _format_krylov_diagnostics(stats, args, kwargs, result):
             _append_stat_field(fields, "res", residual)
     _append_stat_field(fields, "matvecs", stats.get("matvec_count"))
     _append_stat_field(fields, "k", stats.get("krylov_dim"))
-    _append_stat_field(fields, "nx", _hop_nx(args, kwargs))
     _append_stat_field(fields, "dtype", stats.get("input_dtype_name"))
     stop_reason = _user_stop_reason(stats.get("reason"))
     _append_stat_field(fields, "stop", stop_reason)
@@ -352,31 +339,14 @@ def _format_krylov_dtype_warnings(stats, result):
     warnings = []
     algorithm = stats.get("algorithm")
     input_dtype = stats.get("input_dtype")
-    op_dtype = stats.get("op_dtype")
     working_dtype = stats.get("working_dtype")
     output_dtype = None if algorithm == "Lanczos_Exp" else _result_object_dtype_id(
         _output_vector_object(result)
     )
     input_dtype_name = stats.get("input_dtype_name")
-    op_dtype_name = stats.get("op_dtype_name")
     working_dtype_name = stats.get("working_dtype_name")
     output_dtype_name = _dtype_name_from_id(output_dtype)
-    linop_complex_promoted_real_input = (
-        _valid_dtype_id(input_dtype)
-        and _valid_dtype_id(op_dtype)
-        and _valid_dtype_id(working_dtype)
-        and not _dtype_is_complex(input_dtype)
-        and _dtype_is_complex(op_dtype)
-        and _dtype_is_complex(working_dtype)
-    )
-    if linop_complex_promoted_real_input:
-        warnings.append(
-            f"[cytnx] WARNING: LinOp dtype hint {op_dtype_name} promoted real input dtype "
-            f"{input_dtype_name} to complex working dtype {working_dtype_name}. If this LinOp "
-            "represents a real operator, construct it with a real dtype hint to avoid unnecessary "
-            "complex arithmetic."
-        )
-    elif _valid_dtype_id(input_dtype) and _valid_dtype_id(working_dtype) and working_dtype != input_dtype:
+    if _valid_dtype_id(input_dtype) and _valid_dtype_id(working_dtype) and working_dtype != input_dtype:
         warnings.append(
             f"[cytnx] WARNING: Lanczos working dtype changed: {input_dtype_name} -> "
             f"{working_dtype_name}."
@@ -419,6 +389,25 @@ def _method_arg(args, kwargs):
     return None
 
 
+def _krylov_input_arg(args, kwargs):
+    if len(args) >= 2:
+        return args[1]
+    for name in ("Tin", "v", "UT_init"):
+        if name in kwargs:
+            return kwargs[name]
+    return None
+
+
+def _reject_tensor_krylov_input(function_name, args, kwargs):
+    input_arg = _krylov_input_arg(args, kwargs)
+    if isinstance(input_arg, _cytnx.Tensor):
+        raise TypeError(
+            f"cytnx.linalg.{function_name} no longer accepts Tensor initial vectors. "
+            "Use a UniTensor initial vector instead. If you really want to run a Krylov "
+            "algorithm on dense Tensor data, wrap it explicitly as a UniTensor first."
+        )
+
+
 def _print_krylov_diagnostics(args, kwargs, result):
     stats = _cytnx.linalg.last_krylov_stats()
     print(_format_krylov_diagnostics(stats, args, kwargs, result), file=sys.stderr, flush=True)
@@ -438,6 +427,7 @@ _native_Lanczos_Exp = getattr(
 def Lanczos(*args, **kwargs):
     method = _method_arg(args, kwargs)
     method_upper = method.upper() if isinstance(method, str) else method
+    _reject_tensor_krylov_input("Lanczos", args, kwargs)
     if method_upper == "ER":
         raise TypeError(
             "cytnx.linalg.Lanczos(..., method='ER') is disabled. Use one of the "
@@ -471,6 +461,7 @@ _cytnx.linalg.Lanczos = Lanczos
 
 
 def Lanczos_Exp(*args, **kwargs):
+    _reject_tensor_krylov_input("Lanczos_Exp", args, kwargs)
     result = _native_Lanczos_Exp(*args, **kwargs)
     if _krylov_diagnostics_enabled:
         try:

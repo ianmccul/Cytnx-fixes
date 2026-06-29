@@ -176,7 +176,8 @@ namespace cytnx {
         cytnx_error_msg(maxiter < 1, "[ERROR][Lanczos_Gnd] Maxiter must be at least 1.%s", "\n");
 
         const std::uint64_t vec_len = ops.dimension();
-        cytnx_error_msg(vec_len == 0, "[ERROR][Lanczos_Gnd] LinOp::nx() must be positive.%s", "\n");
+        cytnx_error_msg(vec_len == 0,
+                        "[ERROR][Lanczos_Gnd] input vector dimension must be positive.%s", "\n");
         const unsigned int imp_maxiter = capped_nonrestarted_maxiter(maxiter, vec_len);
         const cytnx_uint64 min_krylov_dim =
           std::min<cytnx_uint64>({4, static_cast<cytnx_uint64>(imp_maxiter), vec_len});

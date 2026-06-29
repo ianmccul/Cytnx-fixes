@@ -951,16 +951,6 @@ void linalg_binding(py::module &m) {
 
   m_linalg.def(
     "Arnoldi",
-    [](LinOp *Hop, const Tensor &Tin, const std::string which, const cytnx_uint64 &Maxiter,
-       const double &CvgCrit, const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
-       const bool &verbose) {
-      return cytnx::linalg::Arnoldi(Hop, Tin, which, Maxiter, CvgCrit, k, is_V, ncv, verbose);
-    },
-    py::arg("Hop"), py::arg("Tin"), py::arg("which") = "LM", py::arg("Maxiter") = 10000,
-    py::arg("CvgCrit") = 0, py::arg("k") = 1, py::arg("is_V") = true, py::arg("ncv") = 0,
-    py::arg("verbose") = false);
-  m_linalg.def(
-    "Arnoldi",
     [](LinOp *Hop, const UniTensor &Tin, const std::string which, const cytnx_uint64 &Maxiter,
        const double &CvgCrit, const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
        const bool &verbose) {
@@ -970,17 +960,6 @@ void linalg_binding(py::module &m) {
     py::arg("CvgCrit") = 0, py::arg("k") = 1, py::arg("is_V") = true, py::arg("ncv") = 0,
     py::arg("verbose") = false);
 
-  m_linalg.def(
-    "Lanczos",
-    [](LinOp *Hop, const Tensor &Tin, const std::string method, double residual_tol,
-       unsigned int Maxiter, cytnx_uint64 k, bool is_V, bool is_row, cytnx_uint32 max_krydim,
-       bool verbose) {
-      return cytnx::linalg::Lanczos(Hop, Tin, method, residual_tol, Maxiter, k, is_V, is_row,
-                                    max_krydim, verbose);
-    },
-    py::arg("Hop"), py::arg("Tin"), py::arg("method"), py::arg("residual_tol") = 1.0e-14,
-    py::arg("Maxiter") = 20, py::arg("k") = 1, py::arg("is_V") = true, py::arg("is_row") = false,
-    py::arg("max_krydim") = 0, py::arg("verbose") = false);
   m_linalg.def(
     "Lanczos",
     [](LinOp *Hop, const UniTensor &Tin, const std::string method, double residual_tol,
@@ -993,16 +972,6 @@ void linalg_binding(py::module &m) {
     py::arg("Maxiter") = 20, py::arg("k") = 1, py::arg("is_V") = true, py::arg("is_row") = false,
     py::arg("max_krydim") = 0, py::arg("verbose") = false);
 
-  m_linalg.def(
-    "Lanczos",
-    [](LinOp *Hop, const Tensor &Tin, const std::string which, const cytnx_uint64 &Maxiter,
-       const double &CvgCrit, const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
-       const bool &verbose) {
-      return cytnx::linalg::Lanczos(Hop, Tin, which, Maxiter, CvgCrit, k, is_V, ncv, verbose);
-    },
-    py::arg("Hop"), py::arg("Tin"), py::arg("which") = "SA", py::arg("Maxiter") = 10000,
-    py::arg("CvgCrit") = 0, py::arg("k") = 1, py::arg("is_V") = true, py::arg("ncv") = 0,
-    py::arg("verbose") = false);
   m_linalg.def(
     "Lanczos",
     [](LinOp *Hop, const UniTensor &Tin, const std::string which, const cytnx_uint64 &Maxiter,

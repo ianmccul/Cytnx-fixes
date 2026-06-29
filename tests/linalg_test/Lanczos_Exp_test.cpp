@@ -55,6 +55,12 @@ namespace Lanczos_Exp_Ut_Test {
     UniTensor matvec_impl(const UniTensor& A) override { return A * 3.0; }
   };
 
+  class BlockScaleOp : public LinOp {
+   public:
+    BlockScaleOp() : LinOp("mv", 0, Type.Double, Device.cpu) {}
+    UniTensor matvec_impl(const UniTensor& A) override { return A * 3.0; }
+  };
+
   class SmallResidualOp : public LinOp {
    public:
     explicit SmallResidualOp(const double coupling, const unsigned int dtype = Type.Double)
@@ -161,6 +167,17 @@ namespace Lanczos_Exp_Ut_Test {
     return Tin;
   }
 
+  UniTensor BlockInitialState() {
+    Bond lan_I = Bond(BD_IN, {Qs(-1), Qs(0), Qs(1)}, {2, 2, 2});
+    Bond lan_J = Bond(BD_OUT, {Qs(-1), Qs(0), Qs(1)}, {1, 1, 1});
+    UniTensor state({lan_I, lan_J});
+    state.relabel_({"in", "out"});
+    state.put_block(arange(2).astype(Type.Double).reshape({2, 1}) + 1.0, 0);
+    state.put_block(arange(2).astype(Type.Double).reshape({2, 1}) + 3.0, 1);
+    state.put_block(arange(2).astype(Type.Double).reshape({2, 1}) + 5.0, 2);
+    return state;
+  }
+
   UniTensor DenseExpectedState(const ThreeDimChainOp& op, const UniTensor& Tin, const double tau) {
     auto ans = linalg::Matmul(linalg::ExpH(op.dense_hamiltonian(), tau), Tin.get_block());
     return UniTensor(ans, false, Tin.rowrank());
@@ -238,12 +255,29 @@ namespace Lanczos_Exp_Ut_Test {
     EXPECT_EQ(stats.krylov_dim, 1);
     EXPECT_EQ(stats.matvec_count, 1);
     EXPECT_EQ(stats.input_dtype, Type.Double);
-    EXPECT_EQ(stats.op_dtype, Type.Double);
+    EXPECT_EQ(stats.op_dtype, Type.Void);
     EXPECT_EQ(stats.working_dtype, Type.Double);
     auto total_stats = linalg::krylov_stats();
     EXPECT_EQ(total_stats.matvec_count, stats.matvec_count);
     EXPECT_EQ(total_stats.krylov_dim, stats.krylov_dim);
     EXPECT_EQ(total_stats.op_dtype, stats.op_dtype);
+  }
+
+  TEST(Lanczos_Exp_Ut, BlockUniTensorOneDimensionalKrylovSpace) {
+    BlockScaleOp op;
+    auto Tin = BlockInitialState();
+    const double crit = 1.0e-8;
+    const double tau = 0.2;
+
+    auto x = linalg::Lanczos_Exp(&op, Tin, tau, crit);
+    auto ans = Tin * std::exp(3.0 * tau);
+    auto err = static_cast<double>((x - ans).Norm().item().real());
+
+    EXPECT_EQ(x.uten_type(), UTenType.Block);
+    EXPECT_EQ(x.labels(), Tin.labels());
+    EXPECT_EQ(x.shape(), Tin.shape());
+    EXPECT_EQ(x.rowrank(), Tin.rowrank());
+    EXPECT_LE(err, crit);
   }
 
   TEST(Lanczos_Exp_Ut, FullKrylovSpaceDoesNotWarnAtDimensionLimit) {
@@ -377,20 +411,19 @@ namespace Lanczos_Exp_Ut_Test {
     EXPECT_LE(err, FloatLanczosExpTolerance());
   }
 
-  TEST(Lanczos_Exp_Ut, WarnsWhenInputPrecisionExceedsLinOpHint) {
+  TEST(Lanczos_Exp_Ut, IgnoresLinOpDTypeHint) {
     const double coupling = 5.0e-5;
     SmallResidualOp op(coupling, Type.Float);
     auto Tin = SmallResidualInitialState(Type.Double);
     const double tau = 1.0;
     const unsigned int maxiter = 3;
 
-    testing::internal::CaptureStderr();
     auto x = linalg::Lanczos_Exp(&op, Tin, tau, 1.0e-10, maxiter);
-    const std::string stderr_output = testing::internal::GetCapturedStderr();
 
-    EXPECT_NE(stderr_output.find("input tensor dtype Double"), std::string::npos) << stderr_output;
-    EXPECT_NE(stderr_output.find("LinOp dtype hint Float"), std::string::npos) << stderr_output;
     EXPECT_EQ(x.dtype(), Type.Double);
+    auto stats = linalg::last_krylov_stats();
+    EXPECT_EQ(stats.op_dtype, Type.Void);
+    EXPECT_EQ(stats.working_dtype, Type.Double);
   }
 
   // describe:test incorrect data type

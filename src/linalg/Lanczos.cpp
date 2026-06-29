@@ -54,18 +54,7 @@ namespace cytnx {
       } else if (UT.uten_type() == UTenType.Dense) {
         return get_dim(UT.get_block_());
       }
-    }
-
-    static unsigned int promoted_working_dtype(const unsigned int input_dtype,
-                                               const unsigned int op_dtype,
-                                               const unsigned int default_dtype = Type.Double) {
-      if (input_dtype == Type.Void) {
-        return op_dtype == Type.Void ? default_dtype : op_dtype;
-      }
-      if (op_dtype == Type.Void) {
-        return input_dtype;
-      }
-      return Type.type_promote(input_dtype, op_dtype);
+      return 0;
     }
 
     template <typename T, typename T_ten>
@@ -148,33 +137,6 @@ namespace cytnx {
       }
     }
 
-    std::vector<Tensor> Lanczos(LinOp *Hop, const Tensor &Tin, const std::string method,
-                                double residual_tol, unsigned int Maxiter, cytnx_uint64 k,
-                                bool is_V, bool is_row, cytnx_uint32 max_krydim, bool verbose) {
-      if (method == "ER") {
-        return Lanczos_ER(Hop, k, is_V, Maxiter, residual_tol, is_row, Tin, max_krydim, verbose);
-      } else if (method == "Gnd") {
-        cytnx_error_msg(k > 1, "[ERROR][Lanczos] Only k = 1 is supported for 'Gnd' method.%s",
-                        "\n");
-        cytnx_warning_msg(
-          max_krydim > 0,
-          "[WARNING][Lanczos] max_krydim > 0 while it is irrelevant when using 'Gnd' method.%s",
-          "\n");
-        return Lanczos_Gnd(Hop, residual_tol, is_V, Tin, verbose, Maxiter);
-      } else {
-        cytnx_error_msg(
-          true,
-          "[ERROR][Lanczos] Invalid Lanczos method. The legacy method='ER' implementation has "
-          "been disabled. For general Hermitian eigenvalue problems, use the ARPACK-backed "
-          "Lanczos(..., which=\"SA\") entry point for the smallest algebraic eigenvalue, or choose "
-          "another ARPACK 'which' selector as needed. The method='Gnd' path is a non-restarted "
-          "Lanczos routine intended for specialized local ground-state solves where bounded "
-          "matvec count is more important than standalone eigensolver semantics.%s",
-          "\n");
-        return std::vector<Tensor>();
-      }
-    }  // Lanczos
-
     std::vector<UniTensor> Lanczos(LinOp *Hop, const UniTensor &Tin, const std::string method,
                                    double residual_tol, unsigned int Maxiter, cytnx_uint64 k,
                                    bool is_V, bool is_row, cytnx_uint32 max_krydim, bool verbose) {
@@ -251,14 +213,13 @@ namespace cytnx {
         cytnx_error_msg(
           Type.type_promote(nextTens.dtype(), buffer.dtype()) != buffer.dtype(),
           "[ERROR][Lanczos], matvec returned dtype %s, which cannot be safely represented in the "
-          "ARPACK workspace dtype %s. Use a wider input vector or LinOp dtype hint.%s",
+          "ARPACK workspace dtype %s. Use a wider input vector dtype.%s",
           Type.getname(nextTens.dtype()).c_str(), Type.getname(buffer.dtype()).c_str(), "\n");
         if (!dtype_warning_issued) {
           cytnx_warning_msg(
             true,
             "[WARNING][Lanczos], matvec returned dtype %s while the ARPACK workspace dtype is %s. "
-            "Casting the output; the LinOp dtype hint may be wider than the actual operator "
-            "output.%s",
+            "Casting the output.%s",
             Type.getname(nextTens.dtype()).c_str(), Type.getname(buffer.dtype()).c_str(), "\n");
           dtype_warning_issued = true;
         }
@@ -332,7 +293,7 @@ namespace cytnx {
           std::is_same_v<T, cytnx_double> || std::is_same_v<T, cytnx_float>,
           "Unsupported template types for _Lanczos_internal. T must be double/float type.");
       }
-      cytnx_int32 dim = Hop->nx();
+      cytnx_int32 dim = get_elem_num(UT_init);
       cytnx_int32 nev = k;
       cytnx_int32 ido = 0;  /// reverse communication parameter, must be zero before iteration
       char bmat = 'I';  ///'I': standard eigenproblem, 'G': generalized eigenproblem
@@ -449,7 +410,7 @@ namespace cytnx {
           for (cytnx_int32 ik = 0; ik < k; ++ik) {
             T *tmp_data = tens_data + ik * dim;
             T *z_k_ptr = z + sorted_idx[ik] * dim;
-            if (Hop->device() == Device.cpu) {
+            if (out[1].device() == Device.cpu) {
               memcpy(tmp_data, z_k_ptr, dim * sizeof(T));
             } else {
   #ifdef UNI_GPU
@@ -469,7 +430,7 @@ namespace cytnx {
                   const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
                   const bool &verbose, KrylovStats *stats) {
       auto dtype = UT_init.dtype();
-      auto device = Hop->device();
+      auto device = UT_init.device();
       auto eigvals_tens = zeros({k}, dtype, device);
       out.push_back(UniTensor(eigvals_tens));
       if (is_V) {
@@ -493,93 +454,6 @@ namespace cytnx {
       }
     }
 
-    void _Lanczos(std::vector<Tensor> &out, LinOp *Hop, const Tensor &UT_init,
-                  const std::string which, const cytnx_uint64 &maxiter, const double &CvgCrit,
-                  const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
-                  const bool &verbose, KrylovStats *stats) {
-      auto dtype = UT_init.dtype();
-      auto device = Hop->device();
-      auto eigvals_tens = zeros({k}, dtype, device);
-      auto dim = Hop->nx();
-      out[0] = eigvals_tens;
-      if (is_V) {
-        auto eigTens = k == 1 ? zeros({dim}, dtype, device) : zeros({k, dim}, dtype, device);
-        out[1] = eigTens;
-      }
-
-      switch (dtype) {
-        case Type.Double:
-          _Lanczos_internal<cytnx_double, Tensor>(out, Hop, UT_init, which, maxiter, CvgCrit, k,
-                                                  is_V, ncv, verbose, stats);
-          break;
-        case Type.Float:
-          _Lanczos_internal<cytnx_float, Tensor>(out, Hop, UT_init, which, maxiter, CvgCrit, k,
-                                                 is_V, ncv, verbose, stats);
-          break;
-      }
-    }
-
-    std::vector<Tensor> Lanczos(LinOp *Hop, const Tensor &T_init, const std::string which,
-                                const cytnx_uint64 &maxiter, const double &cvg_crit,
-                                const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
-                                const bool &verbose) {
-      // check which
-      std::vector<std::string> accept_which = {"LM", "LA", "SA"};
-      if (std::find(accept_which.begin(), accept_which.end(), which) == accept_which.end()) {
-        cytnx_error_msg(true, "[ERROR][Lanczos] 'which' should be 'LM', 'LA', 'SA'", "\n");
-      }
-      /// check k
-      cytnx_error_msg(k < 1, "[ERROR][Lanczos] k should be >0%s", "\n");
-      cytnx_error_msg(k > Hop->nx(),
-                      "[ERROR][Lanczos] k can only be up to total dimension of input vector D%s",
-                      "\n");
-
-      // check Tin should be rank-1:
-      auto _T_init = T_init.clone();
-      if (T_init.dtype() == Type.Void) {
-        _T_init = cytnx::random::normal({Hop->nx()}, 0, 1, Hop->device())
-                    .astype(promoted_working_dtype(Type.Void, Hop->dtype()));
-      } else {
-        cytnx_error_msg(_T_init.shape().size() != 1, "[ERROR][Lanczos] Tin should be rank-1%s",
-                        "\n");
-        cytnx_error_msg(_T_init.shape()[0] != Hop->nx(),
-                        "[ERROR][Lanczos] Tin should have dimension consistent with Hop: [%d] %s",
-                        Hop->nx(), "\n");
-        cytnx_error_msg(!Type.is_float(_T_init.dtype()),
-                        "[ERROR][Lanczos] Tin should have floating dtype.%s", "\n");
-        _T_init = _T_init.astype(promoted_working_dtype(_T_init.dtype(), Hop->dtype()));
-      }
-
-      if (Type.is_complex(_T_init.dtype())) {
-        std::string tmp_which = which;
-        if (which == "LA") {
-          tmp_which = "LR";
-        } else if (which == "SA") {
-          tmp_which = "SR";
-        }
-        return Arnoldi(Hop, _T_init, tmp_which, maxiter, cvg_crit, k, is_V, ncv, verbose);
-      }
-
-      cytnx_error_msg(cvg_crit < 0, "[ERROR][Lanczos] cvg_crit should be >= 0%s", "\n");
-      cytnx_error_msg((ncv != 0) && ((ncv < 2 + k) || ncv > Hop->nx()),
-                      "[ERROR][Lanczos] ncv should "
-                      "be 2+k<=ncv<=nx%s",
-                      "\n");
-      cytnx_uint64 output_size = is_V ? 2 : 1;
-      auto out = std::vector<Tensor>(output_size, Tensor());
-      KrylovStats stats;
-      stats.algorithm = "Lanczos";
-      stats.maxiter_requested = maxiter;
-      stats.cvgcrit_requested = cvg_crit;
-      stats.cvgcrit_used = cvg_crit;
-      stats.input_dtype = T_init.dtype();
-      stats.op_dtype = Hop->dtype();
-      stats.working_dtype = _T_init.dtype();
-      _Lanczos(out, Hop, _T_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose, &stats);
-      set_last_krylov_stats(stats);
-      return out;
-    }
-
     std::vector<UniTensor> Lanczos(LinOp *Hop, const UniTensor &UT_init, const std::string which,
                                    const cytnx_uint64 &maxiter, const double &cvg_crit,
                                    const cytnx_uint64 &k, const bool &is_V, const cytnx_int32 &ncv,
@@ -594,23 +468,19 @@ namespace cytnx {
       //     specific routine for complex Hermitian operaton in arpack.
       /// check k
       cytnx_error_msg(k < 1, "[ERROR][Lanczos] k should be >0%s", "\n");
-      cytnx_error_msg(k > Hop->nx(),
-                      "[ERROR][Lanczos] k can only be up to total dimension of input vector D%s",
-                      "\n");
 
       // check Tin should be rank-1:
       auto _UT_init = UT_init;
       if (UT_init.dtype() == Type.Void) {
-        cytnx_error_msg(k < 1, "[ERROR][Lanczos] The initial UniTensor sould be defined.%s", "\n");
+        cytnx_error_msg(true, "[ERROR][Lanczos] The initial UniTensor should be defined.%s", "\n");
       } else {
-        int dim = get_elem_num(UT_init);
-        cytnx_error_msg(dim != Hop->nx(),
-                        "[ERROR][Lanczos] Tin should have dimension consistent with Hop: [%d] %s",
-                        Hop->nx(), "\n");
         cytnx_error_msg(!Type.is_float(UT_init.dtype()),
                         "[ERROR][Lanczos] Tin should have floating dtype.%s", "\n");
-        _UT_init = UT_init.astype(promoted_working_dtype(UT_init.dtype(), Hop->dtype()));
+        _UT_init = UT_init;
       }
+      const auto dim = get_elem_num(_UT_init);
+      cytnx_error_msg(
+        k > dim, "[ERROR][Lanczos] k can only be up to total dimension of input vector D%s", "\n");
 
       if (Type.is_complex(_UT_init.dtype())) {
         std::string tmp_which = which;
@@ -623,7 +493,7 @@ namespace cytnx {
       }
 
       cytnx_error_msg(cvg_crit < 0, "[ERROR][Lanczos] cvg_crit should be >= 0%s", "\n");
-      cytnx_error_msg((ncv != 0) && ((ncv < 2 + k) || ncv > Hop->nx()),
+      cytnx_error_msg((ncv != 0) && ((ncv < 2 + k) || ncv > dim),
                       "[ERROR][Lanczos] ncv should "
                       "be 2+k<=ncv<=nx%s",
                       "\n");
@@ -634,7 +504,7 @@ namespace cytnx {
       stats.cvgcrit_requested = cvg_crit;
       stats.cvgcrit_used = cvg_crit;
       stats.input_dtype = UT_init.dtype();
-      stats.op_dtype = Hop->dtype();
+      stats.op_dtype = Type.Void;
       stats.working_dtype = _UT_init.dtype();
       _Lanczos(out, Hop, _UT_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose, &stats);
       set_last_krylov_stats(stats);

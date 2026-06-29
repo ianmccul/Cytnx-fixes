@@ -68,7 +68,6 @@ target_sources(cytnx
     Norm.cpp
     Tridiag.cpp
     Lanczos.cpp
-    Lanczos_ER.cpp
     Lanczos_Exp.cpp
     Lanczos_Gnd.cpp
     Lanczos_Gnd_Ut.cpp

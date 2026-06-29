@@ -27,14 +27,6 @@ class PyLinOp : public LinOp {
   /* inherit constructor */
   using LinOp::LinOp;
 
-  Tensor matvec_impl(const Tensor &Tin) override {
-    PYBIND11_OVERLOAD_NAME(Tensor, /* Return type */
-                           LinOp, /* Parent class */
-                           "matvec", /* Name of function in Python */
-                           matvec_impl, /* Name of function in C++ */
-                           Tin /* Argument(s) */
-    );
-  }
   UniTensor matvec_impl(const UniTensor &Tin) override {
     PYBIND11_OVERLOAD_NAME(UniTensor, /* Return type */
                            LinOp, /* Parent class */
@@ -50,6 +42,13 @@ void linop_binding(py::module &m) {
     .def(py::init([](const std::string &type, const cytnx_uint64 &nx, py::object dtype,
                      const int &device) {
            cytnx_error_msg(dtype.is_none(), "[ERROR][LinOp] dtype must be supplied.%s", "\n");
+           if (PyErr_WarnEx(PyExc_UserWarning,
+                            "[WARNING][LinOp] constructor nx, dtype, and device metadata are "
+                            "ignored. Krylov solvers derive dimension, dtype, and device from "
+                            "the input vector.",
+                            1) < 0) {
+             throw py::error_already_set();
+           }
            unsigned int dtype_hint = dtype.cast<unsigned int>();
            return new PyLinOp(type, nx, dtype_hint, device);
          }),
@@ -58,16 +57,11 @@ void linop_binding(py::module &m) {
       "set_dtype",
       [](LinOp &, const unsigned int &) {
         throw std::runtime_error(
-          "[ERROR][LinOp] set_dtype() is no longer supported. LinOp dtype is constructor metadata "
-          "describing the operator coefficient dtype hint; changing it after construction would "
-          "not "
-          "change the actual matvec implementation.");
+          "[ERROR][LinOp] set_dtype() is no longer supported. LinOp dtype metadata is ignored; "
+          "Krylov solvers derive the working dtype from the input vector.");
       },
       py::arg("dtype"))
     .def("dtype", &LinOp::dtype)
-    .def(
-      "matvec", [](LinOp &self, const Tensor &Tin) -> Tensor { return self.matvec(Tin); },
-      py::arg("Tin"))
     .def(
       "matvec", [](LinOp &self, const UniTensor &Tin) -> UniTensor { return self.matvec(Tin); },
       py::arg("Tin"))
@@ -75,10 +69,8 @@ void linop_binding(py::module &m) {
       "set_device",
       [](LinOp &, const int &) {
         throw std::runtime_error(
-          "[ERROR][LinOp] set_device() is no longer supported. LinOp device is constructor "
-          "metadata; moving a matrix-free operator to another device requires moving the "
-          "underlying "
-          "operator data and matvec implementation, not just changing metadata.");
+          "[ERROR][LinOp] set_device() is no longer supported. LinOp device metadata is ignored; "
+          "Krylov solvers derive the device from the input vector.");
       },
       py::arg("device"))
     .def("device", &LinOp::device)

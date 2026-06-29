@@ -27,38 +27,14 @@ namespace cytnx {
 
   }  // namespace
 
-  void LinOp::_print() {
-    std::cout << "LinOp(type=" << this->_type << ", nx=" << this->_nx
-              << ", dtype_hint=" << Type.getname(this->_dtype) << ", device=" << this->_device
-              << ")" << std::endl;
-  }
-
-  Tensor LinOp::matvec(const Tensor &Tin) {
-    cytnx_error_msg(tensor_numel(Tin) != this->_nx,
-                    "[ERROR][LinOp] matvec input dimension %d does not match nx=%d\n",
-                    tensor_numel(Tin), this->_nx);
-    Tensor out = this->matvec_impl(Tin);
-    cytnx_error_msg(tensor_numel(out) != this->_nx,
-                    "[ERROR][LinOp] matvec output dimension %d does not match nx=%d\n",
-                    tensor_numel(out), this->_nx);
-    return out;
-  }
-
-  Tensor LinOp::matvec_impl(const Tensor &Tin) {
-    cytnx_error_msg(
-      true, "[ERROR][LinOp] LinOp with 'mv' type requires overriding matvec_impl before use.%s",
-      "\n");
-    return Tensor();
-  }
+  void LinOp::_print() { std::cout << "LinOp(type=" << this->_type << ")" << std::endl; }
 
   UniTensor LinOp::matvec(const UniTensor &Tin) {
-    cytnx_error_msg(unitensor_numel(Tin) != this->_nx,
-                    "[ERROR][LinOp] matvec input dimension %d does not match nx=%d\n",
-                    unitensor_numel(Tin), this->_nx);
+    const auto input_numel = unitensor_numel(Tin);
     UniTensor out = this->matvec_impl(Tin);
-    cytnx_error_msg(unitensor_numel(out) != this->_nx,
-                    "[ERROR][LinOp] matvec output dimension %d does not match nx=%d\n",
-                    unitensor_numel(out), this->_nx);
+    cytnx_error_msg(unitensor_numel(out) != input_numel,
+                    "[ERROR][LinOp] matvec output dimension %d does not match input dimension %d\n",
+                    unitensor_numel(out), input_numel);
     return out;
   }
 

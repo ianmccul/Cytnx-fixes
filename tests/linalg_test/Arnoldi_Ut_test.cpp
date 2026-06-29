@@ -302,6 +302,7 @@ class ErrorTestClass {
   cytnx_int32 ncv = 0;
   ErrorTestClass(){};
   void ExcuteErrorTest();
+  void ExcuteNoErrorTest();
   cytnx_uint64 dim = D * D;
   // set
   void Set_dim(const int _dim) {
@@ -326,6 +327,10 @@ void ErrorTestClass::ExcuteErrorTest() {
     std::cerr << err_msg << std::endl;
     SUCCEED();
   }
+}
+void ErrorTestClass::ExcuteNoErrorTest() {
+  EXPECT_NO_THROW(
+    { auto arnoldi_eigs = linalg::Arnoldi(&H, H.T_init, which, maxiter, cvg_crit, k, is_V, ncv); });
 }
 
 // 2-1, test for wrong input 'which'
@@ -370,11 +375,11 @@ TEST(Arnoldi_Ut, err_crit_negative) {
   err_task.ExcuteErrorTest();
 }
 
-// 2-7, test nx not match
-TEST(Arnoldi_Ut, nx_not_match) {
+// 2-7, constructor nx metadata is ignored
+TEST(Arnoldi_Ut, IgnoresConstructorNx) {
   ErrorTestClass err_task;
   err_task.Set_dim(5);
-  err_task.ExcuteErrorTest();
+  err_task.ExcuteNoErrorTest();
 }
 
 // 2-8, test ncv is out of allowd range

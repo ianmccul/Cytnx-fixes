@@ -9,6 +9,4 @@ target_sources(cytnx
     RegularMPO.cpp
     MPO_base.cpp
 
-    DMRG.cpp
-
 )

@@ -20,15 +20,6 @@ namespace cytnx {
     // type, retained for construction compatibility. Only "mv" is supported.
     std::string _type;
 
-    // nx
-    cytnx_uint64 _nx;
-
-    // Operator coefficient dtype hint. Type.Void can be supplied explicitly for unknown.
-    unsigned int _dtype;
-
-    // device
-    int _device;
-
    public:
     /// @cond
     // we need driver of void f(nx,vin,vout)
@@ -37,17 +28,15 @@ namespace cytnx {
     /**
     @brief Linear Operator class for iterative solvers.
     @param type the type of operator, currently it can only be "mv" (matvec).
-    @param nx the dimension of the vector space on which this linear operator acts.
-    @param dtype operator coefficient dtype hint. Type.Void can be supplied explicitly for unknown.
-    @param device the Operator's on device.
-
-    ## Note:
-        1. LinOp dtype is a promotion hint, not an input/output contract. Concrete operators may
-    promote dtype internally, and iterative algorithms choose their working dtype from the input
-    vector and this hint.
+    @param nx retained for source compatibility; iterative solvers derive the vector dimension from
+    the input vector.
+    @param dtype retained for source compatibility; iterative solvers derive the working dtype from
+    the input vector.
+    @param device retained for source compatibility; iterative solvers derive the device from the
+    input vector.
 
     ## Details:
-        The LinOp class is a class that defines a custom Linear operation acting on a Tensor or
+        The LinOp class is a class that defines a custom Linear operation acting on a
     UniTensor. To use, inherit this class and override the matvec_impl function. See the following
     examples for how to use them.
 
@@ -63,25 +52,19 @@ namespace cytnx {
       cytnx_error_msg(type != "mv",
                       "[ERROR][LinOp] currently only type=\"mv\" (matvec) can be used.%s", "\n");
       this->_type = type;
-      this->_nx = nx;
-      this->_dtype = dtype;
       cytnx_error_msg(device < -1 || device >= Device.Ngpus, "[ERROR] invalid device.%s", "\n");
-      this->_device = device;
     };
 
-    unsigned int dtype() const { return this->_dtype; }
+    unsigned int dtype() const { return Type.Void; }
 
-    int device() const { return this->_device; };
-    cytnx_uint64 nx() const { return this->_nx; };
+    int device() const { return Device.cpu; };
+    cytnx_uint64 nx() const { return 0; };
 
     void _print();
-
-    Tensor matvec(const Tensor &Tin);
 
     UniTensor matvec(const UniTensor &Tin);
 
    protected:
-    virtual Tensor matvec_impl(const Tensor &Tin);
     virtual UniTensor matvec_impl(const UniTensor &Tin);
   };
 

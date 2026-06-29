@@ -2610,59 +2610,6 @@ namespace cytnx {
     // Arnoldi:
     //===========================================
     /**
-    @brief Performs Arnoldi iteration for matrices or linear functions.
-    @details This function calculates the eigenvalue problem using the Arnoldi algorithm. It calls
-    ARPACK routines.
-    @param[in] Hop The Linear Operator defined by the LinOp class or its inheritance (see LinOp).
-    @param[in] Tin The initial vector; this should be a rank-1 Tensor.
-    @param[in] which
-    @parblock
-    Specifies the order in which eigenvalues and corresponding eigenvectors should be found. The
-    supported options are:
-    - "LM": Largest Magnitude
-    - "LR": Largest Real part
-    - "SR": Smallest Real part
-    - "LI": Largest Imaginary part
-    - "SI": Smallest Imaginary part
-    @endparblock
-    @param[in] maxiter The maximum number of iteration steps.
-    @param[in] cvg_crit The convergence criterion of the energy. If set to 0, it reaches machine
-    precision.
-    @param[in] k The number of eigenvalues to compute.
-    @param[in] is_V If set to true, the eigenvectors will be returned.
-    @param[in] ncv Related to number of Arnoldi Vectors generated (the Krylov subspace). If `0`
-    (default), the value is typically determined automatically as `min(2*k+10, dim)`, where `dim` is
-    the dimension of the linear operator (e.g., `nx` in LinOp).
-    @param[in] verbose Prints out iteration information.
-    @return A `std::vector<Tensor>` containing: The first `Tensor` holds the computed eigenvalues.
-    If `is_V` is true, subsequent `Tensor` objects contain the corresponding eigenvectors.
-    @pre
-    1. The data type of LinOp should be float and same as input inital vector.
-    2. 1 <= `k` <= nx. Where nx is the dimension of the vector.
-    3. `Tin` should be a rank-1 Tensor, and the dimension need to same as LinOp->nx().
-    4. If `ncv` \f$ \neq 0\f$, then k+2<= `ncv`<= dim, where dim = LinOp->nx().
-    @note
-    1. To use, define a linear operator with LinOp class either by assigning a custom function or
-    creating a class that inherits LinOp (see LinOp for further details).
-    2. If k is close to the dimension of the vector, the routine may return error (arpack routine
-    -3). In such cases, it is recommended to use the linalg::Eig function directly.
-    @attention
-    For the `which` equal to `SI` or `LI`, and the data type of LinOp is real rather than complex,
-    the output
-    * of eigenvectors are same as `ARPACK`. For example, if the full spectrum is \f$[1.0+0i,
-    0.7+0.1i, 0.7-0.1i, 0.2+0.2i, 0.2-0.2i]\f$, and you choose `which="LI"`, `k=2`, then the output
-    eigenvalues are \f$[0.2+0.2i, 0.2-0.2i]\f$ rather than \f$[0.2+0.2i, 0.7+0.1i]\f$ (as ARPACK
-    prioritizes returning complete complex conjugate pairs for real operators).
-    */
-    std::vector<Tensor> Arnoldi(LinOp *Hop, const Tensor &Tin = Tensor(),
-                                const std::string which = "LM", const cytnx_uint64 &maxiter = 10000,
-                                const cytnx_double &cvg_crit = 0, const cytnx_uint64 &k = 1,
-                                const bool &is_V = true, const cytnx_int32 &ncv = 0,
-                                const bool &verbose = false);
-
-    // Arnoldi:
-    //===========================================
-    /**
   @brief Performs Arnoldi iteration for matrices or linear functions.
   @details This function calculates the eigenvalue problem using the Arnoldi algorithm. It calls
  ARPACK routines.
@@ -2695,7 +2642,7 @@ namespace cytnx {
    1. The initial UniTensor cannot be empty.
    2. The data type of LinOp should be float and same as input inital vector.
    3. 1 <= `k` <= nx. Where nx is the dimension of the vector.
-   4. `Tin` should be a rank-1 Tensor, and the dimension need to same as LinOp->nx().
+   4. The flattened dimension of `Tin` must match LinOp->nx().
    5. If `ncv` \f$ \neq 0\f$, then k+2<= `ncv`<= dim, where dim = LinOp->nx().
   @note
   1. To use, define a linear operator with LinOp class either by assigning a custom function or
@@ -2722,93 +2669,6 @@ namespace cytnx {
                                    const bool &is_V = true, const cytnx_int32 &ncv = 0,
                                    const bool &verbose = false);
 
-    // Lanczos:
-    //===========================================
-    /**
-    @brief perform Lanczos for hermitian/symmetric matrices or linear function.
-    @details
-        This legacy explicitly restarted Lanczos entry point is disabled because the old
-    implementation was numerically incorrect. For general Hermitian eigenvalue problems, use the
-    ARPACK-backed Lanczos(..., which="SA") entry point for the smallest algebraic eigenvalue, or
-    choose another ARPACK `which` selector as needed. The Lanczos(..., method="Gnd") path is a
-    non-restarted Lanczos routine intended for specialized local ground-state solves where bounded
-    matvec count is more important than standalone eigensolver semantics.
-    @param[in] Hop the Linear Operator defined by LinOp class or it's inheritance (see LinOp).
-    @param[in] Tin the initial vector, this should be rank-1.
-    @param[in] method
-    @parblock
-    the desired Lanczos method to use, the supported option is:
-
-    <b>'Gnd'</b> : non-restarted local ground-state Lanczos
-
-    The legacy <b>'ER'</b> explicitly restarted Lanczos implementation is disabled because it was
-    numerically incorrect.
-
-    @endparblock
-
-    @param[in] residual_tol desired Ritz residual tolerance for method="Gnd".
-    @param[in] maxiter the maximum interation steps for each k.
-    @param[in] k the number of lowest k eigen values.
-    @param[in] is_V if set to true, the eigen vectors will be returned.
-    @param[in] is_row whether the return eigen vectors should be in row-major form.
-    @param[in] max_krydim the maximum krylov subspace dimension for each iteration.
-    @param[in] verbose print out iteration info.
-    @return
-        [eigvals (Tensor), eigvecs (Tensor)(option)]
-  @note
-  To use, define a linear operator with LinOp class either by assigning a custom function or
-  creating a class that inherits LinOp (see LinOp for further details).
-    */
-    std::vector<Tensor> Lanczos(LinOp *Hop, const Tensor &Tin = Tensor(),
-                                const std::string method = "Gnd", double residual_tol = 1.0e-14,
-                                unsigned int Maxiter = 20, cytnx_uint64 k = 1, bool is_V = true,
-                                bool is_row = false, cytnx_uint32 max_krydim = 0,
-                                bool verbose = false);
-    /**
-  @brief Performs Lanczos iteration for matrices or linear functions.
-  @details This function calculates the eigenvalue problem using the Lanczos algorithm. It calls
-  ARPACK routines.
-  @param[in] Hop The Linear Operator defined by the LinOp class or its inheritance (see LinOp).
-    @param[in] Tin the initial vector, this should be rank-1.
-  @param[in] which
-  @parblock
-  Specifies the order in which eigenvalues and corresponding eigenvectors should be found. The
-  supported options are:
-  - "LM": Largest Magnitude
-  - "LA": Largest algebraic
-  - "SA": Smallest algebraic
-  @endparblock
-  @param[in] maxiter The maximum number of iteration steps.
-  @param[in] cvg_crit The convergence criterion of the energy. If set to 0, it reaches machine
-  precision.
-  @param[in] k The number of eigenvalues to compute.
-  @param[in] is_V If set to true, the eigenvectors will be returned.
-  @param[in] ncv Related to number of Arnoldi Vectors generated (the Krylov subspace). If `0`
-  (default), the value is typically determined automatically as `min(2*k+10, dim)`, where `dim` is
-  the dimension of the linear operator (e.g., `nx` in LinOp).
-  @param[in] verbose Prints out iteration information.
-    @return
-        [eigvals (Tensor), eigvecs (Tensor)(option)]
-
-  @pre
-   1. The data type of LinOp should be float and same as input inital vector.
-   2. 1 <= `k` <= nx. Where nx is the dimension of the vector.
-   3. `Tin` should be a rank-1 Tensor, and the dimension need to same as LinOp->nx().
-   4. If `ncv` \f$ \neq 0\f$, then k+2<= `ncv`<= dim, where dim = LinOp->nx().
-  @note
-  1. To use, define a linear operator with LinOp class either by assigning a custom function or
-  creating a class that inherits LinOp (see LinOp for further details).
-  2. If k is close to the dimension of the vector, the routine may return error (arpack routine -3).
-  In such cases, it is recommended to use the linalg::Eigh function directly.
-  @attention
-  The input operator in LinOp must be Hermitian; otherwise, the simulation results will be
-  incorrect.
-    */
-    std::vector<Tensor> Lanczos(LinOp *Hop, const Tensor &Tin = Tensor(),
-                                const std::string which = "SA", const cytnx_uint64 &maxiter = 10000,
-                                const cytnx_double &cvg_crit = 0, const cytnx_uint64 &k = 1,
-                                const bool &is_V = true, const cytnx_int32 &ncv = 0,
-                                const bool &verbose = false);
     /**
   @brief Performs Lanczos iteration for matrices or linear functions.
   @details This function calculates the eigenvalue problem using the Lanczos algorithm. It calls
@@ -2840,7 +2700,7 @@ namespace cytnx {
    1. The initial UniTensor cannot be empty.
    2. The data type of LinOp should be float and same as input inital vector.
    3. 1 <= `k` <= nx. Where nx is the dimension of the vector.
-   4. `Tin` should be a rank-1 Tensor, and the dimension need to same as LinOp->nx().
+   4. The flattened dimension of `Tin` must match LinOp->nx().
    5. If `ncv` \f$ \neq 0\f$, then k+2<= `ncv`<= dim, where dim = LinOp->nx().
   @note
   1. To use, define a linear operator with LinOp class either by assigning a custom function or
@@ -2906,59 +2766,6 @@ namespace cytnx {
                                    unsigned int Maxiter = 20, cytnx_uint64 k = 1, bool is_V = true,
                                    bool is_row = false, cytnx_uint32 max_krydim = 0,
                                    bool verbose = false);
-
-    // Lanczos:
-    //===========================================
-    /**
-    @brief perform Lanczos for hermitian/symmetric matrices or linear function.
-    @details
-        This legacy explicitly restarted Lanczos entry point is disabled because the old
-    implementation was numerically incorrect. For general Hermitian eigenvalue problems, use the
-    ARPACK-backed Lanczos(..., which="SA") overload for the smallest algebraic eigenvalue, or choose
-    another ARPACK `which` selector as needed.
-    @param[in] Hop the Linear Operator defined by LinOp class or it's inheritance (see LinOp).
-    @param[in] k the number of lowest k eigen values.
-    @param[in] is_V if set to true, the eigen vectors will be returned.
-    @param[in] maxiter the maximum interation steps for each k.
-    @param[in] CvgCrit ignored because this legacy entry point is disabled.
-    @param[in] is_row whether the return eigen vectors should be in row-major form.
-    @param[in] Tin the initial vector, this should be rank-1
-    @param[in] max_krydim ignored because this legacy entry point is disabled.
-    @param[in] verbose print out iteration info.
-    @return
-        [eigvals (Tensor), eigvecs (Tensor)(option)]
-    @note
-        To use, define a linear operator with LinOp class either by assign a custom function or
-    create a class that inherit LinOp (see LinOp for further details)
-    */
-    std::vector<Tensor> Lanczos_ER(LinOp *Hop, cytnx_uint64 k = 1, bool is_V = true,
-                                   cytnx_uint64 maxiter = 10000, double CvgCrit = 1.0e-14,
-                                   bool is_row = false, const Tensor &Tin = Tensor(),
-                                   cytnx_uint32 max_krydim = 4, bool verbose = false);
-
-    // Lanczos:
-    //===========================================
-    /**
-    @brief perform Lanczos for hermitian/symmetric matrices or linear function to get ground state
-    and lowest eigen value
-    @details
-        This function uses non-restarted Lanczos to approximate a local ground state. For generic
-    ground-state eigensolver use, prefer the ARPACK-backed Lanczos(..., which="SA") overload.
-    @param[in] Hop the Linear Operator defined by LinOp class or it's inheritance (see LinOp).
-    @param[in] residual_tol desired Ritz residual tolerance.
-    @param[in] is_V if set to true, the eigen vectors will be returned.
-    @param[in] Tin the initial vector, this should be rank-1
-    @param[in] verbose print out iteration info.
-    @param[in] maxiter the maximum interation steps for each k.
-    @return
-        [eigvals (Tensor), eigvecs (Tensor)(option)]
-    @note
-        To use, define a linear operator with LinOp class either by assign a custom function or
-    create a class that inherit LinOp (see LinOp for further details)
-    */
-    std::vector<Tensor> Lanczos_Gnd(LinOp *Hop, double residual_tol = 1.0e-14, bool is_V = true,
-                                    const Tensor &Tin = Tensor(), bool verbose = false,
-                                    unsigned int Maxiter = 20);
 
     // Lanczos:
     //===============================================

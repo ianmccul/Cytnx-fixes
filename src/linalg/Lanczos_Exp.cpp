@@ -26,6 +26,9 @@ namespace cytnx {
 
       // <A|B>
       Scalar Dot_internal(const UniTensor &A, const UniTensor &B) {
+        if (A.uten_type() == UTenType.BlockFermionic) {
+          return Contract(A.Dagger().fermion_twists(), B).item();
+        }
         return Contract(A.Dagger(), B).item();
       }
 
@@ -104,15 +107,10 @@ namespace cytnx {
         return dtype;
       }
 
-      unsigned int promote_optional_dtype_internal(const unsigned int left,
-                                                   const unsigned int right) {
-        if (left == Type.Void) {
-          return right;
-        }
-        if (right == Type.Void) {
-          return left;
-        }
-        return Type.type_promote(left, right);
+      cytnx_uint64 tensor_element_count_internal(const Tensor &tensor) {
+        cytnx_uint64 count = 1;
+        for (const auto dim : tensor.shape()) count *= dim;
+        return count;
       }
 
       unsigned int lanczos_exp_output_dtype_internal(const unsigned int working_dtype,
@@ -126,38 +124,9 @@ namespace cytnx {
         return working_dtype;
       }
 
-      unsigned int promoted_working_dtype_internal(const unsigned int input_dtype,
-                                                   const unsigned int op_dtype) {
-        return promote_optional_dtype_internal(input_dtype, op_dtype);
-      }
-
-      int floating_precision_rank_internal(const unsigned int dtype) {
-        if (dtype == Type.Float || dtype == Type.ComplexFloat) {
-          return 1;
-        }
-        if (dtype == Type.Double || dtype == Type.ComplexDouble) {
-          return 2;
-        }
-        return 0;
-      }
-
-      void warn_if_state_precision_exceeds_operator_hint_internal(const unsigned int input_dtype,
-                                                                  const unsigned int op_dtype) {
-        const auto input_precision = floating_precision_rank_internal(input_dtype);
-        const auto op_precision = floating_precision_rank_internal(op_dtype);
-        cytnx_warning_msg(
-          op_precision > 0 && input_precision > op_precision,
-          "[WARNING][Lanczos_Exp] input tensor dtype %s has higher precision than LinOp dtype "
-          "hint %s. The Krylov basis will use the promoted dtype, but the operator action may be "
-          "limited by the LinOp dtype hint.",
-          Type.getname(input_dtype).c_str(), Type.getname(op_dtype).c_str());
-      }
-
       unsigned int promoted_output_dtype_internal(const unsigned int input_dtype,
-                                                  const unsigned int op_dtype,
                                                   const unsigned int tau_dtype) {
-        const auto working_dtype = promoted_working_dtype_internal(input_dtype, op_dtype);
-        return lanczos_exp_output_dtype_internal(working_dtype, tau_dtype);
+        return lanczos_exp_output_dtype_internal(input_dtype, tau_dtype);
       }
 
       unsigned int projected_exponential_output_dtype_internal(const unsigned int output_dtype,
@@ -170,6 +139,39 @@ namespace cytnx {
           return;
         }
         out = out.astype(dtype);
+      }
+
+      void check_matvec_output_internal(const UniTensor &out, const UniTensor &reference) {
+        cytnx_error_msg(out.labels().size() != reference.labels().size(),
+                        "[ERROR][Lanczos_Exp] LinOp.matvec(UniTensor) output must have the same "
+                        "labels and shape as input.%s",
+                        "\n");
+        cytnx_error_msg(out.labels() != reference.labels(),
+                        "[ERROR][Lanczos_Exp] LinOp.matvec(UniTensor) output must have the same "
+                        "labels as input.%s",
+                        "\n");
+        cytnx_error_msg(out.shape() != reference.shape(),
+                        "[ERROR][Lanczos_Exp] LinOp.matvec(UniTensor) output must have the same "
+                        "shape as input.%s",
+                        "\n");
+      }
+
+      UniTensor reconstruct_from_krylov_basis_internal(const std::vector<UniTensor> &basis,
+                                                       const Tensor &projected_exponential,
+                                                       const double input_norm) {
+        cytnx_error_msg(basis.empty(), "[ERROR][Lanczos_Exp] Krylov basis is empty.%s", "\n");
+        const auto krylov_dim = static_cast<cytnx_uint64>(basis.size());
+        cytnx_error_msg(
+          projected_exponential.shape().size() != 2 ||
+            projected_exponential.shape()[0] < krylov_dim || projected_exponential.shape()[1] < 1,
+          "[ERROR][Lanczos_Exp] projected exponential has incompatible shape.%s", "\n");
+
+        UniTensor out = projected_exponential.at({0, 0}) * input_norm * basis[0];
+        for (cytnx_uint64 i = 1; i < krylov_dim; ++i) {
+          out += projected_exponential.at({i, 0}) * input_norm * basis[i];
+        }
+        out.set_rowrank_(basis[0].rowrank());
+        return out;
       }
 
       double scalar_abs_internal(const Scalar &s) { return static_cast<double>(s.abs()); }
@@ -401,7 +403,13 @@ namespace cytnx {
         const unsigned int input_dtype = T.dtype();
         const double eps = dtype_epsilon_internal(input_dtype);
         std::vector<UniTensor> vs;
-        cytnx_uint32 vec_len = Hop->nx();
+        cytnx_uint32 vec_len = 1;
+        if (T.uten_type() == UTenType.Dense) {
+          vec_len = tensor_element_count_internal(T.get_block_());
+        } else if (T.uten_type() == UTenType.Block || T.uten_type() == UTenType.BlockFermionic) {
+          vec_len = 0;
+          for (const auto &block : T.get_blocks_()) vec_len += tensor_element_count_internal(block);
+        }
         cytnx_uint32 imp_maxiter = std::min(Maxiter, vec_len);
         if (stats) {
           stats->maxiter_used = imp_maxiter;
@@ -419,6 +427,7 @@ namespace cytnx {
 
         // first iteration
         auto wp = (Hop->matvec(v)).relabel_(v.labels());
+        check_matvec_output_internal(wp, v);
         if (stats) {
           stats->matvec_count++;
         }
@@ -435,10 +444,6 @@ namespace cytnx {
           stats->breakdown_tol = kBetaBreakdownRoundoff * eps * beta_breakdown_scale;
         }
 
-        // prepare U
-        auto Vk_shape = v.shape();
-        Vk_shape.insert(Vk_shape.begin(), 1);
-        auto Vk = v.get_block().reshape(Vk_shape);
         std::vector<UniTensor> Vs;
         Vs.push_back(v);
         UniTensor v_old;
@@ -469,12 +474,12 @@ namespace cytnx {
             }
             break;
           }
-          Vk.append(v.get_block_().contiguous());
           Vs.push_back(v);
           gamma_product *= static_cast<long double>(std::abs(beta));
           Hp.at({(cytnx_uint64)i, (cytnx_uint64)i - 1}) =
             Hp.at({(cytnx_uint64)i - 1, (cytnx_uint64)i}) = beta;
           wp = (Hop->matvec(v)).relabel_(v.labels());
+          check_matvec_output_internal(wp, v);
           if (stats) {
             stats->matvec_count++;
           }
@@ -538,51 +543,7 @@ namespace cytnx {
           stats->krylov_dim = Vs.size();
         }
 
-        // Let V_k be the n × (k + 1) matrix whose columns are v[0],...,v[k] respectively.
-        UniTensor Vk_ut(Vk);
-        Vk_ut.set_rowrank_(1);
-        auto VkDag_ut = Vk_ut.Dagger();  // Index order is inverted here!
-        /*
-         *    |||
-         *  |-----|
-         *  | out |        =
-         *  |_____|
-         *
-         *
-         *    |||
-         *  |-----|
-         *  | V_k |
-         *  |_____|
-         *     |    kl:(k+1) * (k + 1)
-         *     |
-         *  |-----|
-         *  |  B  |
-         *  |_____|
-         *     |    kr:(k+1) * (k + 1)
-         *     |
-         *  |------------|
-         *  | V_k^Dagger |
-         *  |____________|
-         *    |||
-         *  |-----|
-         *  |  v0 |
-         *  |_____|
-         *
-         */
-
-        auto B = UniTensor(B_mat, false, 1, {"cytnx_internal_label_kl", "cytnx_internal_label_kr"});
-        auto label_kl = B.labels()[0];
-        auto label_kr = B.labels()[1];
-        auto Vk_labels = v.labels();
-        Vk_labels.insert(Vk_labels.begin(), label_kl);
-        Vk_ut.relabel_(Vk_labels);
-        auto VkDag_labels =
-          std::vector<std::string>(v.labels().rbegin(), v.labels().rend());  // inverted order
-        VkDag_labels.push_back(label_kr);
-        VkDag_ut.relabel_(VkDag_labels);
-        out = Contracts({T, VkDag_ut, B}, "", true);
-        out = Contract(out, Vk_ut);
-        out.set_rowrank_(v.rowrank());
+        out = reconstruct_from_krylov_basis_internal(Vs, B_mat, v_nrm);
         cast_dense_output_internal(
           out, projected_exponential_output_dtype_internal(output_dtype, out.dtype()));
       }
@@ -595,10 +556,6 @@ namespace cytnx {
       cytnx_error_msg(Tin.device() != Device.cpu,
                       "[ERROR][Lanczos_Exp] Lanczos_Exp still does not support cuda devices.%s",
                       "\n");
-      cytnx_error_msg(Tin.uten_type() != UTenType.Dense,
-                      "[ERROR][Lanczos_Exp] The Block UniTensor type is still not supported.%s",
-                      "\n");
-
       cytnx_error_msg(!Type.is_float(Tin.dtype()),
                       "[ERROR][Lanczos_Exp] Lanczos_Exp can only accept input tensors with "
                       "floating types (complex/real)%s",
@@ -614,10 +571,8 @@ namespace cytnx {
       // makes the projected exponential and final output complex; it should not force a real
       // operator to accept complex Krylov vectors.
       UniTensor v0;
-      warn_if_state_precision_exceeds_operator_hint_internal(Tin.dtype(), Hop->dtype());
-      v0 = Tin.astype(promoted_working_dtype_internal(Tin.dtype(), Hop->dtype()));
-      const auto output_dtype =
-        promoted_output_dtype_internal(Tin.dtype(), Hop->dtype(), tau.dtype());
+      v0 = Tin;
+      const auto output_dtype = promoted_output_dtype_internal(Tin.dtype(), tau.dtype());
 
       UniTensor out;
 
@@ -640,7 +595,7 @@ namespace cytnx {
       stats.cvgcrit_requested = CvgCrit;
       stats.cvgcrit_used = _cvgcrit;
       stats.input_dtype = Tin.dtype();
-      stats.op_dtype = Hop->dtype();
+      stats.op_dtype = Type.Void;
       stats.working_dtype = v0.dtype();
 
       Lanczos_Exp_Ut_internal(out, Hop, v0, tau, output_dtype, _cvgcrit, Maxiter, verbose, &stats);

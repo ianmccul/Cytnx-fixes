@@ -50,18 +50,7 @@ namespace cytnx {
       } else if (UT.uten_type() == UTenType.Dense) {
         return get_dim(UT.get_block_());
       }
-    }
-
-    static unsigned int promoted_working_dtype(const unsigned int input_dtype,
-                                               const unsigned int op_dtype,
-                                               const unsigned int default_dtype = Type.Double) {
-      if (input_dtype == Type.Void) {
-        return op_dtype == Type.Void ? default_dtype : op_dtype;
-      }
-      if (op_dtype == Type.Void) {
-        return input_dtype;
-      }
-      return Type.type_promote(input_dtype, op_dtype);
+      return 0;
     }
 
     template <typename T, typename T_ten>
@@ -154,14 +143,13 @@ namespace cytnx {
         cytnx_error_msg(
           Type.type_promote(nextTens.dtype(), buffer.dtype()) != buffer.dtype(),
           "[ERROR][Arnoldi], matvec returned dtype %s, which cannot be safely represented in the "
-          "ARPACK workspace dtype %s. Use a wider input vector or LinOp dtype hint.%s",
+          "ARPACK workspace dtype %s. Use a wider input vector dtype.%s",
           Type.getname(nextTens.dtype()).c_str(), Type.getname(buffer.dtype()).c_str(), "\n");
         if (!dtype_warning_issued) {
           cytnx_warning_msg(
             true,
             "[WARNING][Arnoldi], matvec returned dtype %s while the ARPACK workspace dtype is %s. "
-            "Casting the output; the LinOp dtype hint may be wider than the actual operator "
-            "output.%s",
+            "Casting the output.%s",
             Type.getname(nextTens.dtype()).c_str(), Type.getname(buffer.dtype()).c_str(), "\n");
           dtype_warning_issued = true;
         }
@@ -265,7 +253,7 @@ namespace cytnx {
                       "Unsupported template types for _Arnoldi_internal_complex. T must be "
                       "std::complex<double/float> and T2 its corresponding real type.");
       }
-      cytnx_int32 dim = Hop->nx();
+      cytnx_int32 dim = get_elem_num(UT_init);
       cytnx_int32 nev = k;
       cytnx_int32 ido = 0;  /// reverse communication parameter, must be zero before iteration
       char bmat = 'I';  ///'I': standard eigenproblem, 'G': generalized eigenproblem
@@ -383,7 +371,7 @@ namespace cytnx {
           for (cytnx_int32 ik = 0; ik < k; ++ik) {
             T* tmp_data = tens_data + ik * dim;
             T* z_k_ptr = z + sorted_idx[ik] * dim;
-            if (Hop->device() == Device.cpu) {
+            if (out[1].device() == Device.cpu) {
               memcpy(tmp_data, z_k_ptr, dim * sizeof(T));
             } else {
   #ifdef UNI_GPU
@@ -451,7 +439,7 @@ namespace cytnx {
                       "Unsupported template types for _Arnoldi_internal_real. T must be "
                       "double / flot.");
       }
-      cytnx_int32 dim = Hop->nx();
+      cytnx_int32 dim = get_elem_num(UT_init);
       cytnx_int32 nev = k;
       cytnx_int32 ido = 0;  /// reverse communication parameter, must be zero before iteration
       char bmat = 'I';  ///'I': standard eigenproblem, 'G': generalized eigenproblem
@@ -675,7 +663,7 @@ namespace cytnx {
                   const cytnx_uint64& k, const bool& is_V, const cytnx_int32& ncv,
                   const bool& verbose, KrylovStats* stats) {
       auto dtype = UT_init.dtype();
-      auto device = Hop->device();
+      auto device = UT_init.device();
       auto out_dtype = dtype;
       switch (dtype) {
         case Type.ComplexDouble:
@@ -722,111 +710,6 @@ namespace cytnx {
       }
     }
 
-    void _Arnoldi(std::vector<Tensor>& out, LinOp* Hop, const Tensor& UT_init,
-                  const std::string which, const cytnx_uint64& maxiter, const double& CvgCrit,
-                  const cytnx_uint64& k, const bool& is_V, const cytnx_int32& ncv,
-                  const bool& verbose, KrylovStats* stats) {
-      auto dtype = UT_init.dtype();
-      auto device = Hop->device();
-      auto out_dtype = dtype;
-      switch (dtype) {
-        case Type.ComplexDouble:
-          out_dtype = dtype;
-          break;
-        case Type.ComplexFloat:
-          out_dtype = dtype;
-          break;
-        case Type.Double:
-          out_dtype = Type.ComplexDouble;
-          break;
-        case Type.Float:
-          out_dtype = Type.ComplexFloat;
-          break;
-      }
-      auto eigvals_tens = zeros({k}, out_dtype, device);
-      auto dim = Hop->nx();
-      out[0] = eigvals_tens;
-      if (is_V) {
-        auto eigTens =
-          k == 1 ? zeros({dim}, out_dtype, device) : zeros({k, dim}, out_dtype, device);
-        out[1] = eigTens;
-      }
-
-      switch (dtype) {
-        case Type.ComplexDouble:
-          _Arnoldi_internal_complex<cytnx_complex128, cytnx_double, Tensor>(
-            out, Hop, UT_init, which, maxiter, CvgCrit, k, is_V, ncv, verbose, stats);
-          break;
-        case Type.ComplexFloat:
-          _Arnoldi_internal_complex<cytnx_complex64, cytnx_float, Tensor>(
-            out, Hop, UT_init, which, maxiter, CvgCrit, k, is_V, ncv, verbose, stats);
-          break;
-        case Type.Double:
-          _Arnoldi_internal_real<cytnx_double, Tensor>(out, Hop, UT_init, which, maxiter, CvgCrit,
-                                                       k, is_V, ncv, verbose, stats);
-          break;
-        case Type.Float:
-          _Arnoldi_internal_real<cytnx_float, Tensor>(out, Hop, UT_init, which, maxiter, CvgCrit, k,
-                                                      is_V, ncv, verbose, stats);
-          break;
-      }
-    }
-
-    std::vector<Tensor> Arnoldi(LinOp* Hop, const Tensor& T_init, const std::string which,
-                                const cytnx_uint64& maxiter, const double& cvg_crit,
-                                const cytnx_uint64& k, const bool& is_V, const int& ncv,
-                                const bool& verbose) {
-      // check which
-      std::vector<std::string> accept_which = {"LM", "LR", "LI", "SR", "SI"};
-      if (std::find(accept_which.begin(), accept_which.end(), which) == accept_which.end()) {
-        cytnx_error_msg(true,
-                        "[ERROR][Arnoldi] 'which' should be 'LM', 'LR, 'LI'"
-                        ", 'SR', 'SI'",
-                        "\n");
-      }
-
-      /// check k
-      cytnx_error_msg(k < 1, "[ERROR][Arnoldi] k should be >0%s", "\n");
-      cytnx_error_msg(k > Hop->nx(),
-                      "[ERROR][Arnoldi] k can only be up to total dimension of input vector D%s",
-                      "\n");
-
-      // check Tin should be rank-1:
-      auto _T_init = T_init.clone();
-      if (T_init.dtype() == Type.Void) {
-        _T_init = cytnx::random::normal({Hop->nx()}, 0, 1, Hop->device())
-                    .astype(promoted_working_dtype(Type.Void, Hop->dtype(), Type.Double));
-      } else {
-        cytnx_error_msg(T_init.shape().size() != 1, "[ERROR][Arnoldi] Tin should be rank-1%s",
-                        "\n");
-        cytnx_error_msg(T_init.shape()[0] != Hop->nx(),
-                        "[ERROR][Arnoldi] Tin should have dimension consistent with Hop: [%d] %s",
-                        Hop->nx(), "\n");
-        cytnx_error_msg(!Type.is_float(T_init.dtype()),
-                        "[ERROR][Arnoldi] Tin should have floating dtype.%s", "\n");
-        _T_init = _T_init.astype(promoted_working_dtype(_T_init.dtype(), Hop->dtype()));
-      }
-
-      cytnx_error_msg(cvg_crit < 0, "[ERROR][Arnoldi] cvg_crit should be >= 0%s", "\n");
-      cytnx_error_msg((ncv != 0) && ((ncv < 2 + k) || ncv > Hop->nx()),
-                      "[ERROR][Arnoldi] ncv should "
-                      "be 2+k<=ncv<=nx%s",
-                      "\n");
-      cytnx_uint64 output_size = is_V ? 2 : 1;
-      auto out = std::vector<Tensor>(output_size, Tensor());
-      KrylovStats stats;
-      stats.algorithm = "Arnoldi";
-      stats.maxiter_requested = maxiter;
-      stats.cvgcrit_requested = cvg_crit;
-      stats.cvgcrit_used = cvg_crit;
-      stats.input_dtype = T_init.dtype();
-      stats.op_dtype = Hop->dtype();
-      stats.working_dtype = _T_init.dtype();
-      _Arnoldi(out, Hop, _T_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose, &stats);
-      set_last_krylov_stats(stats);
-      return out;
-    }
-
     std::vector<UniTensor> Arnoldi(LinOp* Hop, const UniTensor& UT_init, const std::string which,
                                    const cytnx_uint64& maxiter, const double& cvg_crit,
                                    const cytnx_uint64& k, const bool& is_V, const int& ncv,
@@ -842,26 +725,22 @@ namespace cytnx {
 
       /// check k
       cytnx_error_msg(k < 1, "[ERROR][Arnoldi] k should be >0%s", "\n");
-      cytnx_error_msg(k > Hop->nx(),
-                      "[ERROR][Arnoldi] k can only be up to total dimension of input vector D%s",
-                      "\n");
 
       auto _UT_init = UT_init;
       // check Tin should be rank-1:
       if (UT_init.dtype() == Type.Void) {
-        cytnx_error_msg(k < 1, "[ERROR][Arnoldi] The initial UniTensor sould be defined.%s", "\n");
+        cytnx_error_msg(true, "[ERROR][Arnoldi] The initial UniTensor should be defined.%s", "\n");
       } else {
-        auto dim = get_elem_num(UT_init);
-        cytnx_error_msg(dim != Hop->nx(),
-                        "[ERROR][Arnoldi] Tin should have dimension consistent with Hop: [%d] %s",
-                        Hop->nx(), "\n");
         cytnx_error_msg(!Type.is_float(UT_init.dtype()),
                         "[ERROR][Arnoldi] Tin should have floating dtype.%s", "\n");
-        _UT_init = UT_init.astype(promoted_working_dtype(UT_init.dtype(), Hop->dtype()));
+        _UT_init = UT_init;
       }
+      const auto dim = get_elem_num(_UT_init);
+      cytnx_error_msg(
+        k > dim, "[ERROR][Arnoldi] k can only be up to total dimension of input vector D%s", "\n");
 
       cytnx_error_msg(cvg_crit < 0, "[ERROR][Arnoldi] cvg_crit should be >= 0%s", "\n");
-      cytnx_error_msg((ncv != 0) && ((ncv < 2 + k) || ncv > Hop->nx()),
+      cytnx_error_msg((ncv != 0) && ((ncv < 2 + k) || ncv > dim),
                       "[ERROR][Arnoldi] ncv should "
                       "be 2+k<=ncv<=nx%s",
                       "\n");
@@ -872,7 +751,7 @@ namespace cytnx {
       stats.cvgcrit_requested = cvg_crit;
       stats.cvgcrit_used = cvg_crit;
       stats.input_dtype = UT_init.dtype();
-      stats.op_dtype = Hop->dtype();
+      stats.op_dtype = Type.Void;
       stats.working_dtype = _UT_init.dtype();
       _Arnoldi(out, Hop, _UT_init, which, maxiter, cvg_crit, k, is_V, ncv, verbose, &stats);
       set_last_krylov_stats(stats);
