@@ -76,26 +76,8 @@ void tnalgo_binding(py::module &m) {
     .def("get_all", [](tn_algo::MPO &self) { return self.get_all(); })
     .def("get_op", &tn_algo::MPO::get_op, py::arg("idx"));
 
-  py::class_<tn_algo::DMRG>(m_tnalgo, "DMRG")
-    .def(py::init<tn_algo::MPO, tn_algo::MPS, std::vector<tn_algo::MPS>, const double &>(),
-         py::arg("mpo"), py::arg("mps"), py::arg("ortho_mps") = std::vector<tn_algo::MPS>(),
-         py::arg("weight") = 30)
-    .def("initialize", &tn_algo::DMRG::initialize)
-    .def(
-      "sweep",
-      [](tn_algo::DMRG &self, const bool &verbose = false, const cytnx_int64 &maxit = 4000,
-         const cytnx_int64 &krydim = 4) {
-        auto E = self.sweep(verbose, maxit, krydim);
-        return double(E);
-      },
-      py::arg("verbose") = false, py::arg("maxit") = 4000, py::arg("krydim") = 4)
-    .def(
-      "sweepv2",
-      [](tn_algo::DMRG &self, const bool &verbose = false, const cytnx_int64 &maxit = 4000,
-         const cytnx_int64 &krydim = 4) {
-        auto E = self.sweepv2(verbose, maxit, krydim);
-        return double(E);
-      },
-      py::arg("verbose") = false, py::arg("maxit") = 4000, py::arg("krydim") = 4);
+  // DMRG is intentionally not bound on fixes/general. The legacy implementation was removed from
+  // the library, and leaving the binding here makes the Python extension import with unresolved
+  // DMRG_impl symbols.
 }
 #endif
