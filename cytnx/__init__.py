@@ -10,7 +10,6 @@ from .Tensor_conti import *
 from .linalg_conti import *
 from .UniTensor_conti import *
 from .Network_conti import *
-from .MPS_conti import *
 from .Symmetry_conti import *
 from .Bond_conti import *
 

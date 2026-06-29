@@ -2,7 +2,7 @@ import cytnx as cy
 import cytnx.linalg_conti as linalg_conti
 
 
-def test_complex_linop_hint_warning_is_specific():
+def test_working_dtype_change_warning_is_generic():
     stats = {
         "input_dtype": cy.Type.Double,
         "input_dtype_name": cy.Type.getname(cy.Type.Double),
@@ -15,9 +15,8 @@ def test_complex_linop_hint_warning_is_specific():
     warnings = linalg_conti._format_krylov_dtype_warnings(stats, [])
 
     assert len(warnings) == 1
-    assert "LinOp dtype hint" in warnings[0]
-    assert "promoted real input dtype" in warnings[0]
-    assert "real operator" in warnings[0]
+    assert "Lanczos working dtype changed" in warnings[0]
+    assert "LinOp dtype hint" not in warnings[0]
 
 
 def test_non_linop_complex_promotion_uses_generic_warning():
