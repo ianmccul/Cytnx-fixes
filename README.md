@@ -6,7 +6,7 @@ The default `main` branch intentionally contains only this README and, later, li
 
 The `master` branch is kept as a clean Cytnx source branch aligned with `Cytnx-dev/Cytnx` master at commit `7b63aad8`, the fork point used by the fixes work.
 
-The branch `fixes/general` contains the main material on this repository. This branch makes many correctness, usability and numerical stability fixes for Cytnx-based Python applications. This includes rewritten and more robust Krylov/Lanczos algorithms, stricter `LinOp` dimension checks, fixed dtype-changing elementwise exponentials, safer Python `Svd_truncate()` defaults, added `Lq()` function so that regauging MPS does not need to go via SVD, and diagnostics that show what the linear algebra functions are doing and convergence information. Some functions that were buggy, difficult to use, or numerically unsound have been removed. Existing scripts may need small updates, but failures should now be explicit instead of silently producing unreliable results.
+The branch `fixes/general` contains the main material on this repository. This branch makes many correctness, usability and numerical stability fixes for Cytnx-based Python applications. This includes rewritten and more robust Krylov/Lanczos algorithms, `Lanczos_Exp()` support for block `UniTensor` inputs, a cleaner input-vector-based `LinOp` contract, fixed dtype-changing elementwise exponentials, safer Python `Svd_truncate()` defaults, added `Lq()` function so that regauging MPS does not need to go via SVD, and diagnostics that show what the linear algebra functions are doing and convergence information. Some functions that were buggy, difficult to use, or numerically unsound have been removed. Existing scripts may need small updates, but failures should now be explicit instead of silently producing unreliable results.
 
 See [Cytnx-fixes issue #1](https://github.com/ianmccul/Cytnx-fixes/issues/1) for a survey of upstream Cytnx issues that this branch either fixes directly, probably fixes, or makes easier to diagnose.
 
@@ -52,6 +52,7 @@ Branch `fixes/general` adds:
 * `bf1e95f4` Fix Lanczos_Exp convergence estimate
 * `b08bc731` Test LinOp matvec dimension checks
 * `c39dde5a` Make LinOp dtype and device metadata immutable
+* `13eb8771` Fix Krylov LinOp input-vector contract
 
 Visible changes for Python users:
 
@@ -59,6 +60,7 @@ Visible changes for Python users:
 * `cytnx.linalg.Expf()` and `cytnx.linalg.Expf_()` have been removed. Use `cytnx.linalg.Exp()` / `cytnx.linalg.Exp_()` instead.
 * `cytnx.linalg.Lanczos_Exp()` uses `cytnx.linalg.ExpH()` for Hermitian projected Krylov exponentials, and preserves precision. Real Hermitian operators with real prefactors remain real and are no longer converted to complex.
 * `cytnx.linalg.Lanczos_Exp()` uses more reliable error estimate instead of the old projected-matrix last-component heuristic. The default tolerance is now `1e-8`, and requests below the useful dtype-dependent numerical scale are raised with a warning.
+* `cytnx.linalg.Lanczos_Exp()` now accepts CPU block `UniTensor` inputs. The Krylov basis is kept as `UniTensor` objects and the result is reconstructed as a linear combination of those basis vectors, instead of packing the basis into a dense buffer. This is important for block-symmetric TDVP and other tensor-network code that evolves block `UniTensor` states.
 * `cytnx.linalg.ExpM()` uses a scaling-and-squaring Pade implementation instead of diagonalizing the matrix and inverting the eigenvector matrix. This is substantially more robust for non-normal matrices. `ExpM()` for Float and Double matrices with real scale coefficients no longer converts to ComplexFloat/ComplexDouble.
 * `cytnx.linalg.Lq()` is available for dense Tensor and dense UniTensor inputs. Together with `cytnx.linalg.Qr()`, this gives a QR/LQ canonicalization path for tensor-network code that does not need singular values.
 * Python `cytnx.linalg.Svd_truncate()` now treats missing or zero cutoffs as potentially dangerous:
@@ -67,7 +69,7 @@ Visible changes for Python users:
   * explicit `err>0` uses the requested singular-value cutoff;
   * explicit `err<0` can be used for code that needs to deliberately keep all singular vectors, including numerical zeros.
 * The `Svd_truncate()` warning points users toward `Qr()` / `Lq()` for canonicalization when singular values are not needed, and toward `Svd()` / `Gesvd()` when singular values are needed without truncation.
-* Python dtype helper functions. These are useful in Python code that needs to construct dtype-stable tensors, choose a `LinOp` dtype, or avoid hard-coded dtype tables:
+* Python dtype helper functions. These are useful in Python code that needs to construct dtype-stable tensors, inspect dtypes, or avoid hard-coded dtype tables:
   * `cytnx.Type.is_complex(dtype)`
   * `cytnx.Type.is_floating(dtype)`
   * `cytnx.Type.is_real(dtype)`
@@ -84,15 +86,14 @@ Visible changes for Python users:
   * `cytnx.Type.typeSize(dtype)`
   * `cytnx.Type.getname(dtype)`
   * `cytnx.Type.enum_name(dtype)`
-* Krylov routines have stricter `LinOp` size checking. Calls through Cytnx linalg routines check that `LinOp.matvec()` input and output vectors match the declared `nx()` dimension. Python code that set `nx()` incorrectly will now cause an error. This can be fixed by setting the `nx` parameter correctly when constructing the `LinOp`.
-* It is no longer necessary to set the dtype of a real-valued `LinOp` to `ComplexDouble` or `ComplexFloat` just because the input vector might be complex. This particularly affects TDVP code where the Hamiltonian is real but the timestep might be real or complex. Previous Cytnx would require the `LinOp` dtype of a real Hamiltonian to be complex in order to use it with a complex timestep. This is no longer the case. The dtype is instead treated as a type promotion hint.
-* `LinOp` dtype and device metadata are fixed at construction time. The C++ `set_dtype()` and `set_device()` mutators have been removed. The Python methods remain as compatibility stubs, but now raise explicit errors explaining that changing metadata would not change the actual matrix-free `matvec()` implementation.
-* `cytnx.linalg.Lanczos_Exp()` now warns if the input tensor has higher precision than the `LinOp` dtype hint, for example a Double input tensor with a Float `LinOp`. This usually means the Krylov basis will use the promoted dtype, but the operator action may still only carry single-precision information.
+* Krylov routines now derive vector dimension, working dtype, and device from the input `UniTensor`, not from `LinOp` constructor metadata. The old `LinOp("mv", nx, dtype, device)` signature is still accepted for source compatibility, but `nx`, `dtype`, and `device` are ignored. Python construction emits a warning about this.
+* `LinOp.matvec()` now checks that the output flattened element count matches the input flattened element count. It no longer checks against constructor `nx`.
+* Matrix-free Krylov solvers require an explicit initial `UniTensor`. The old empty-initial-vector convention cannot infer a vector dimension now that `LinOp` no longer owns `nx`.
+* `LinOp` `set_dtype()` and `set_device()` remain as Python compatibility stubs, but now raise explicit errors explaining that Krylov metadata comes from the input vector.
 * The old `cytnx.linalg.Lanczos(..., method="ER")` function has been removed. An attempt to call `method=ER` raises an error explaining what to use instead. For ordinary Hermitian eigenvalue problems, use the ARPACK-backed interface such as `cytnx.linalg.Lanczos(Hop, Tin, which="SA")` for the smallest algebraic eigenvalue. If you *really* want a Lanczos function with explicit restarts, then call `cytnx.linalg.Lanczos(..., method="Gnd")` in a loop. This will work better than the old `"ER"` method, but not as well as ARPACK.
 * `cytnx.linalg.Lanczos(..., method="Gnd")` has been reworked to be a simple but numerically stable Lanczos solver. It is intended for iterative algorithms where convergence is achieved through multiple passes of environment updates and the number of eigensolver iterations in each pass is kept deliberately low. It is expected and normal with this mode that during the early stages of the calculation the convergence criteria might not be met before `Maxiter` is reached. The default `Maxiter` is now `20`; requests that would build more than `100` Krylov vectors are capped and warned, since a non-restarted Lanczos will be numerically unstable for a large number of iterations. For DMRG applications, 4 or 5 iterations is probably appropriate.
-* Krylov routines record basic convergence and work statistics. Use `cytnx.linalg.last_krylov_stats()` to inspect the most recent Krylov call, `cytnx.linalg.krylov_stats()` to inspect cumulative stats for the current thread, and `cytnx.linalg.clear_krylov_stats()` to reset them. The reported fields include the algorithm path, convergence flag, reason, matvec count, iteration count, effective Krylov dimension, requested/used tolerance and iteration limits, final residual/error data where available, and input/operator/working dtypes.
-* Python calls to `cytnx.linalg.Lanczos()` and `cytnx.linalg.Lanczos_Exp()` now print a one-line diagnostic summary to stderr by default. This reports the algorithm path, `LinOp.nx()`, dtype, matvec count, Krylov dimension, stopping reason, and final residual/error data where available. It also warns when a very large absolute energy-difference threshold causes the solver to stop before `Maxiter` is used. Disable this with `cytnx.linalg.set_krylov_diagnostics(False)` or by setting `CYTNX_KRYLOV_DIAGNOSTICS=0`.
-* Krylov diagnostics now warn when a complex `LinOp` dtype hint promotes a real input vector to complex working dtype. If the operator is actually real, construct the `LinOp` with a real dtype hint to avoid unnecessary complex arithmetic.
+* Krylov routines record basic convergence and work statistics. Use `cytnx.linalg.last_krylov_stats()` to inspect the most recent Krylov call, `cytnx.linalg.krylov_stats()` to inspect cumulative stats for the current thread, and `cytnx.linalg.clear_krylov_stats()` to reset them. The reported fields include the algorithm path, convergence flag, reason, matvec count, iteration count, effective Krylov dimension, requested/used tolerance and iteration limits, final residual/error data where available, and input/working dtypes.
+* Python calls to `cytnx.linalg.Lanczos()` and `cytnx.linalg.Lanczos_Exp()` now print a one-line diagnostic summary to stderr by default. This reports the algorithm path, input dtype, matvec count, Krylov dimension, stopping reason, and final residual/error data where available. It also warns when a very large absolute energy-difference threshold causes the solver to stop before `Maxiter` is used. Disable this with `cytnx.linalg.set_krylov_diagnostics(False)` or by setting `CYTNX_KRYLOV_DIAGNOSTICS=0`.
 * Error messages no longer print raw stack traces by default in builds without debug symbols. Set `CYTNX_SHOW_STACKTRACE=1` to force the previous raw backtrace behavior, or `CYTNX_SHOW_STACKTRACE=0` to suppress stack traces explicitly.
 * The Python package imports NumPy before loading the Cytnx extension module. This avoids BLAS/LAPACK symbol load-order crashes in environments where importing Cytnx first breaks NumPy's own runtime checks.
 * The dead Python torch-backend import branch has been removed. This branch uses the normal Cytnx backend only.
@@ -112,18 +113,20 @@ python -m pip install -v -e .
 
 Then run the existing calculation. The most common follow-up fixes are:
 
-1. If a `LinOp` dimension error appears, set `nx` to the flattened dimension of the vector space acted on by `matvec()`. Do not use `nx=0`; this now fails because it was never a valid Krylov operator dimension.
+1. `LinOp` constructor metadata is no longer needed. Existing calls such as `LinOp("mv", nx, dtype, device)` still work for source compatibility, but `nx`, `dtype`, and `device` are ignored. The Krylov solver gets dimension, dtype, and device from the input `UniTensor`.
 
-2. If diagnostics warn that a complex `LinOp` dtype is promoting real vectors to complex, use a real dtype hint for real operators. For example, a real Hamiltonian should normally use `dtype=cytnx.Type.Double`, not `ComplexDouble`, even if some later timestep or state is complex.
+2. If a `LinOp` dimension error appears, check the `matvec()` implementation. The output must have the same flattened element count as the input.
 
-3. If an old Gnd call fails because it used `CvgCrit=...`, replace it with `residual_tol=...`. If unsure, start with:
+3. Krylov solvers now require an explicit initial `UniTensor`. If old code relied on an empty initial vector and constructor `nx` metadata to choose a random start, create the initial vector explicitly before calling the solver.
+
+4. If an old Gnd call fails because it used `CvgCrit=...`, replace it with `residual_tol=...`. If unsure, start with:
 
    ```python
    cytnx.linalg.Lanczos(Hop, Tin, method="Gnd", residual_tol=1e-14, Maxiter=20)
    ```
    For DMRG-type solvers, it is generally better to use fewer iterations (perhaps 4 or 5), but make sure that there are enough sweeps to converge.
 
-4. If `method="ER"` fails, replace it with an ARPACK selector for standalone eigenvalue problems, usually:
+5. If `method="ER"` fails, replace it with an ARPACK selector for standalone eigenvalue problems, usually:
 
    ```python
    cytnx.linalg.Lanczos(Hop, Tin, which="SA")
@@ -131,9 +134,9 @@ Then run the existing calculation. The most common follow-up fixes are:
 
    For local DMRG-style solves where a fixed small number of matvecs is intended, use `method="Gnd"` with a sensible `Maxiter`.
 
-5. If `Svd_truncate()` warns about a missing cutoff, inspect that call site. If it is being used only to canonicalize an MPS and singular values are not needed, use `Qr()` or `Lq()` instead. If it is really truncating a bond, pass an explicit positive cutoff such as `err=1e-8`. If you deliberately want to keep numerical null vectors, pass `err=-1`.
+6. If `Svd_truncate()` warns about a missing cutoff, inspect that call site. If it is being used only to canonicalize an MPS and singular values are not needed, use `Qr()` or `Lq()` instead. If it is really truncating a bond, pass an explicit positive cutoff such as `err=1e-8`. If you deliberately want to keep numerical null vectors, pass `err=-1`.
 
-6. Read the Krylov diagnostic lines printed to stderr. They show `nx`, dtype, matvec count, Krylov dimension, stopping reason, and residual/error information. You may prefer to incorporate some or all of this information into your own diagnostic output instead. The same information is available through:
+7. Read the Krylov diagnostic lines printed to stderr. They show dtype, matvec count, Krylov dimension, stopping reason, and residual/error information. You may prefer to incorporate some or all of this information into your own diagnostic output instead. The same information is available through:
 
    ```python
    cytnx.linalg.last_krylov_stats()
@@ -154,15 +157,9 @@ Some of the Cytnx example scripts contain serious flaws that silently produce in
 
 In Cytnx, this example program has very poor numerical properties. If you run this example using the `fixes/general` branch it will run and produce good results. It will however show some warnings about changed behavior and some suggestions to improve the code. The first thing that you will notice is that it produces a lot more output. By default, `fixes/general` will display diagnostic output from linear algebra functions. The first new line should look something like:
 ```text
-[cytnx] Lanczos_Exp: err=1.09339e-16/1e-08, matvecs=4, k=4, nx=4, dtype=Double (Float64), stop=eigenvector, maxiter=4/100
+[cytnx] Lanczos_Exp: err=1.09339e-16/1e-08, matvecs=4, k=4, dtype=Double (Float64), stop=eigenvector, maxiter=4/100
 ```
-This is from the `Lanczos_Exp` function for calculating the matrix exponential. This shows that the obtained error measure was `1e-16` (numerically exact) from a requested error tolerance of `1e-8`. `matvecs=4` shows the number of matrix-vector muliply operations that were performed by the `LinOp`. `k=4` is internal information, indicating that the `Lanczos_Exp` function built a Krylov subspace of dimension 4. Normally this will be equal to the number of `matvec` operations. `nx=4` is the `LinOp::nx()` parameter, of the flattened size of the domain and codomain of the operator. The `dtype` is the input tensor type `Double`. `stop=eigenvector` shows the stopping criteria of `Lanczos_Exp`; `stop=eigenvector` indicates that it finished because it found a numerically exact eigenvector (which aligns with the final tolerance `1e-16` being smaller than numerical precision). The final term is the `maxiter` parameter, showing that the function performed 4 out of a possible maximum of 100 iterations.
-
-The next new line is a warning:
-```text
-[cytnx] WARNING: LinOp dtype hint Complex Double (Complex Float64) promoted real input dtype Double (Float64) to complex working dtype Complex Double (Complex Float64). If this LinOp represents a real operator, construct it with a real dtype hint to avoid unnecessary complex arithmetic.
-```
-This warning means that the `dtype` parameter specified by the `LinOp` is too strict, and resulted in a conversion of the tensor from `Double` to `Complex Double`. In the `fixes/general` branch, `LinOp` operators that are purely real are able to advertise a `dtype` of `Double`, even if they are used in real-time evolution or other applications where the input tensors are complex. Cytnx requires the `LinOp` in these cases to have `dtype` of `Complex Double`, which has the side-effect that if you use the same operator for *imaginary time* evolution, where all of the prefactors are real valued, the `LinOp` will convert what would have been a purely real calculation to using complex arithmetic. However this is just a warning, and we can fix that later.
+This is from the `Lanczos_Exp` function for calculating the matrix exponential. This shows that the obtained error measure was `1e-16` (numerically exact) from a requested error tolerance of `1e-8`. `matvecs=4` shows the number of matrix-vector muliply operations that were performed by the `LinOp`. `k=4` is internal information, indicating that the `Lanczos_Exp` function built a Krylov subspace of dimension 4. Normally this will be equal to the number of `matvec` operations. The `dtype` is the input tensor type `Double`. `stop=eigenvector` shows the stopping criteria of `Lanczos_Exp`; `stop=eigenvector` indicates that it finished because it found a numerically exact eigenvector (which aligns with the final tolerance `1e-16` being smaller than numerical precision). The final term is the `maxiter` parameter, showing that the function performed 4 out of a possible maximum of 100 iterations.
 
 The next line is another warning, and a much longer one:
 ```text
@@ -185,12 +182,10 @@ This warning is only shown *once* for each time `Svd_truncate` appears in the sc
 
 The calculation now continues, continuing to print a diagnostic line for each call to `Lanczos_Exp`. The next line is notable:
 ```text
-[cytnx] Lanczos_Exp: err=4.58211e-19/1e-08, matvecs=4, k=4, nx=4, dtype=Complex Double (Complex Float64), stop=eigenvector, maxiter=4/100
+[cytnx] Lanczos_Exp: err=4.58211e-19/1e-08, matvecs=4, k=4, dtype=Complex Double (Complex Float64), stop=eigenvector, maxiter=4/100
 ```
-This is fairly similar to the previous diagnostic line, except we can see now the `dtype` is `Complex Double`. This came from the `LinOp` at the previous step promoting the tensor from real to complex arithmetic, and the remainder of the calculation will be done using complex arithmetic.
+Current diagnostics no longer include `nx`, since Krylov vector dimensions are inferred from the input `UniTensor` rather than from `LinOp` metadata. If a later diagnostic shows `dtype=Complex Double`, that means the evolved state itself is now complex, not that the `LinOp` constructor dtype promoted the workspace.
 
 The calculation now continues, showing a diagnostic line each step, until we get a second warning about `Svd_truncate()`, this time originating from `tdvp1_dense.py:214`. This is the second time this function is used in the TDVP example script. Again we can ignore this warning if we like; the script will still work. Or we could take one of the suggested actions to stop the warning.
 
 No more warnings are shown for this script, but it continues to produce a diagnostic line for each step. These diagnostics show that the convergence of the calculation is very good, which is reflected in the energy of the state: decreasing rapidly to the groundstate energy of `-7.0` in the first section of the calculation (imaginary time evolution), and approximately constant at `~24.0` in the second section of the calculation (real-time evolution).
-
-Earlier, we ignored the warning about the `LinOp::dtype` hint that caused the unwanted promotion of the real tensor to complex. We can fix that by removing from the script the 5 conversions to `Complex Double` (lines 52,53,54 and 62,63). With this change, the warning about promotion of real input to complex will not appear, and the first half of the calculation, imaginary time evolution, will happen purely in real `Double` arithmetic with no unnecessary complex components.
