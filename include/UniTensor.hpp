@@ -3172,6 +3172,26 @@ namespace cytnx {
     std::vector<cytnx_uint64> shape() const { return this->_impl->shape(); }
 
     /**
+    @brief Return the number of scalar elements stored in the UniTensor block representation.
+    @details For dense UniTensors this is the size of the single stored block. For block UniTensors
+             this is the sum of the sizes of all stored blocks.
+    @return cytnx_uint64
+    */
+    cytnx_uint64 flattened_dimension() const {
+      auto block_size = [](const Tensor &block) {
+        cytnx_uint64 size = 1;
+        for (const auto &dim : block.shape()) size *= dim;
+        return size;
+      };
+
+      cytnx_uint64 size = 0;
+      for (cytnx_uint64 bidx = 0; bidx < this->Nblocks(); bidx++) {
+        size += block_size(this->get_block_(bidx));
+      }
+      return size;
+    }
+
+    /**
      * @brief Get the sign information of a fermionic UniTensor.
      * @details Length is the number of blocks in the UniTensor. If the return is true, the sign of
      * the elements of the corresponding block needs to be flipped.

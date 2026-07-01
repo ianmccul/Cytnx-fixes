@@ -115,6 +115,12 @@ TEST_F(BlockUniTensorTest, is_contiguous) {
 TEST_F(BlockUniTensorTest, shape) {
   EXPECT_EQ(std::vector<cytnx::cytnx_uint64>({2, 2, 1}), Spf.shape());
 }
+
+TEST_F(BlockUniTensorTest, flattened_dimension) {
+  EXPECT_EQ(utzero345.flattened_dimension(), 60);
+  EXPECT_EQ(BUT6.flattened_dimension(), 5);
+}
+
 TEST_F(BlockUniTensorTest, is_blockform) {
   EXPECT_EQ(Spf.is_blockform(), true);
   EXPECT_EQ(utzero345.is_blockform(), false);

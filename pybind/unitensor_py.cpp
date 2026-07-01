@@ -94,6 +94,111 @@ inline bool parse_get_blocks_silent_arg(const py::args &args, const py::kwargs &
   return silent;
 }
 
+inline cytnx_uint64 tensor_block_size(const Tensor &block) {
+  cytnx_uint64 size = 1;
+  for (const auto &dim : block.shape()) size *= dim;
+  return size;
+}
+
+inline const char *bond_direction_name(const bondType &type) {
+  switch (type) {
+    case BD_KET:
+      return "ket";
+    case BD_BRA:
+      return "bra";
+    case BD_REG:
+      return "regular";
+    default:
+      return "unknown";
+  }
+}
+
+inline py::list bond_sector_layout(const Bond &bond) {
+  py::list sectors;
+  const auto &qnums = bond.qnums();
+  const auto &degs = bond.getDegeneracies();
+  for (cytnx_uint64 qidx = 0; qidx < qnums.size(); qidx++) {
+    py::dict sector;
+    sector["qindex"] = qidx;
+    sector["qnum"] = qnums[qidx];
+    sector["degeneracy"] = qidx < degs.size() ? degs[qidx] : cytnx_uint64(0);
+    sectors.append(sector);
+  }
+  return sectors;
+}
+
+inline py::list unitensor_leg_layout(const UniTensor &self) {
+  py::list layout;
+  const auto &labels = self.labels();
+  const auto &bonds = self.bonds();
+  for (cytnx_uint64 axis = 0; axis < bonds.size(); axis++) {
+    py::dict leg;
+    leg["axis"] = axis;
+    leg["label"] = labels[axis];
+    leg["dim"] = bonds[axis].dim();
+    leg["direction"] = bond_direction_name(bonds[axis].type());
+    leg["is_dual"] = bonds[axis].type() == BD_BRA;
+    leg["rowrank_side"] = axis < self.rowrank() ? "row" : "col";
+    leg["qnums"] = bonds[axis].qnums();
+    leg["degeneracies"] = bonds[axis].getDegeneracies();
+    leg["sectors"] = bond_sector_layout(bonds[axis]);
+    layout.append(leg);
+  }
+  return layout;
+}
+
+inline py::list unitensor_block_layout(const UniTensor &self) {
+  py::list layout;
+  const auto &bonds = self.bonds();
+  const auto &labels = self.labels();
+
+  for (cytnx_uint64 bidx = 0; bidx < self.Nblocks(); bidx++) {
+    const Tensor &block = self.get_block_(bidx);
+    py::dict entry;
+    entry["index"] = bidx;
+    entry["shape"] = block.shape();
+    entry["size"] = tensor_block_size(block);
+
+    if (self.is_blockform()) {
+      const auto &qindices = self.get_qindices(bidx);
+      py::list sectors;
+      for (cytnx_uint64 axis = 0; axis < qindices.size(); axis++) {
+        const cytnx_uint64 qidx = qindices[axis];
+        const auto &qnums = bonds[axis].qnums();
+        const auto &degs = bonds[axis].getDegeneracies();
+        py::dict sector;
+        sector["axis"] = axis;
+        sector["label"] = labels[axis];
+        sector["direction"] = bond_direction_name(bonds[axis].type());
+        sector["qindex"] = qidx;
+        sector["qnum"] = qidx < qnums.size() ? py::cast(qnums[qidx]) : py::none();
+        sector["degeneracy"] = qidx < degs.size() ? py::cast(degs[qidx]) : py::none();
+        sectors.append(sector);
+      }
+      entry["qindices"] = qindices;
+      entry["sectors"] = sectors;
+    } else {
+      entry["qindices"] = py::none();
+      entry["sectors"] = py::list();
+    }
+
+    layout.append(entry);
+  }
+  return layout;
+}
+
+inline cytnx_uint64 flattened_dimension_from_block_layout(const py::sequence &layout) {
+  cytnx_uint64 size = 0;
+  for (const auto &entry : layout) {
+    py::dict block = py::cast<py::dict>(entry);
+    if (!block.contains("size")) {
+      throw py::key_error("block layout entry is missing required key 'size'");
+    }
+    size += block["size"].cast<cytnx_uint64>();
+  }
+  return size;
+}
+
 // Lambda used for _getitem__ and _setitem__
 auto build_accessors = [](const UniTensor &self, py::object locators) {
   ssize_t start, stop, step, slicelength;
@@ -199,6 +304,9 @@ void unitensor_binding(py::module &m) {
     .def("set_elem", &cHclass::set_elem<cytnx_uint16>)
     .def("set_elem", &cHclass::set_elem<cytnx_int16>)
     .def("set_elem", &cHclass::set_elem<cytnx_bool>);
+
+  m.def("flattened_dimension_from_block_layout", &flattened_dimension_from_block_layout,
+        py::arg("layout"));
 
   // entry.UniTensor
   py::class_<UniTensor>(m, "UniTensor")
@@ -499,6 +607,9 @@ void unitensor_binding(py::module &m) {
     .def("bond", [](UniTensor &self, const cytnx_uint64 &idx){return self.bond(idx);} ,py::arg("idx"))
     .def("bond", [](UniTensor &self, const std::string &label){return self.bond(label);} ,py::arg("label"))
     .def("shape", &UniTensor::shape)
+    .def("flattened_dimension", &UniTensor::flattened_dimension)
+    .def("leg_layout", &unitensor_leg_layout)
+    .def("block_layout", &unitensor_block_layout)
     .def("signflip", &UniTensor::signflip)
 //     .def("signflip_", &UniTensor::signflip_)
     .def("to_", &UniTensor::to_)

@@ -85,6 +85,53 @@ class TestApplyDenseUniTensor:
         assert (self.ut.get_block() - original).Norm().item() < 1e-14
 
 
+class TestUniTensorLayoutMetadata:
+    def test_dense_layout_and_flattened_dimension(self):
+        ut = cytnx.UniTensor(cytnx.zeros([2, 3]), labels=["a", "b"])
+
+        assert ut.shape() == [2, 3]
+        assert ut.flattened_dimension() == 6
+
+        legs = ut.leg_layout()
+        assert [leg["label"] for leg in legs] == ["a", "b"]
+        assert [leg["dim"] for leg in legs] == [2, 3]
+        assert [leg["direction"] for leg in legs] == ["regular", "regular"]
+
+        blocks = ut.block_layout()
+        assert blocks == [{"index": 0, "shape": [2, 3], "size": 6, "qindices": None, "sectors": []}]
+        assert cytnx.flattened_dimension_from_block_layout(blocks) == 6
+
+    def test_block_layout_reports_sectors_and_flattened_dimension(self):
+        ket = cytnx.Bond(cytnx.BD_IN, [cytnx.Qs(0) >> 2, cytnx.Qs(1) >> 3])
+        bra = cytnx.Bond(cytnx.BD_OUT, [cytnx.Qs(0) >> 5, cytnx.Qs(1) >> 7])
+        ut = cytnx.UniTensor([ket, bra], labels=["ket", "bra"])
+
+        assert ut.shape() == [5, 12]
+        assert ut.flattened_dimension() == 31
+
+        legs = ut.leg_layout()
+        assert [leg["direction"] for leg in legs] == ["ket", "bra"]
+        assert [leg["is_dual"] for leg in legs] == [False, True]
+        assert legs[0]["sectors"] == [
+            {"qindex": 0, "qnum": [0], "degeneracy": 2},
+            {"qindex": 1, "qnum": [1], "degeneracy": 3},
+        ]
+
+        blocks = ut.block_layout()
+        assert [block["qindices"] for block in blocks] == [[0, 0], [1, 1]]
+        assert [block["shape"] for block in blocks] == [[2, 5], [3, 7]]
+        assert [block["size"] for block in blocks] == [10, 21]
+        assert blocks[0]["sectors"][1] == {
+            "axis": 1,
+            "label": "bra",
+            "direction": "bra",
+            "qindex": 0,
+            "qnum": [0],
+            "degeneracy": 5,
+        }
+        assert cytnx.flattened_dimension_from_block_layout(blocks) == ut.flattened_dimension()
+
+
 # ---------------------------------------------------------------------------
 # BlockFermionicUniTensor: apply() applies pending signflips
 # ---------------------------------------------------------------------------
