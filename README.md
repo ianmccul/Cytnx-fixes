@@ -6,7 +6,7 @@ The default `main` branch intentionally contains only this README and, later, li
 
 The `master` branch is kept as a clean Cytnx source branch aligned with `Cytnx-dev/Cytnx` master at commit `7b63aad8`, the fork point used by the fixes work.
 
-The branch `fixes/general` contains the main material on this repository. This branch makes many correctness, usability and numerical stability fixes for Cytnx-based Python applications. This includes rewritten and more robust Krylov/Lanczos algorithms, `Lanczos_Exp()` support for block `UniTensor` inputs, a cleaner input-vector-based `LinOp` contract, fixed dtype-changing elementwise exponentials, safer Python `Svd_truncate()` defaults, added `Lq()` function so that regauging MPS does not need to go via SVD, and diagnostics that show what the linear algebra functions are doing and convergence information. Some functions that were buggy, difficult to use, or numerically unsound have been removed. Existing scripts may need small updates, but failures should now be explicit instead of silently producing unreliable results.
+The branch `fixes/general` contains the main material on this repository. This branch makes many correctness, usability and numerical stability fixes for Cytnx-based Python applications. This includes rewritten and more robust Krylov/Lanczos algorithms, `Lanczos_Exp()` support for block `UniTensor` inputs, a cleaner input-vector-based `LinOp` contract, explicit `UniTensor` layout metadata for block tensors, fixed dtype-changing elementwise exponentials, safer Python `Svd_truncate()` defaults, added `Lq()` function so that regauging MPS does not need to go via SVD, and diagnostics that show what the linear algebra functions are doing and convergence information. Some functions that were buggy, difficult to use, or numerically unsound have been removed. Existing scripts may need small updates, but failures should now be explicit instead of silently producing unreliable results.
 
 See [Cytnx-fixes issue #1](https://github.com/ianmccul/Cytnx-fixes/issues/1) for a survey of upstream Cytnx issues that this branch either fixes directly, probably fixes, or makes easier to diagnose.
 
@@ -32,6 +32,7 @@ The main focus for this branch is fixing the worst of the numerical algorithm pr
 
 Branch `fixes/general` adds:
 
+* `f2551241` Add UniTensor layout metadata helpers
 * `34aa230a` Fix Exp dtype-changing paths and remove Expf
 * `0fd96560` Replace ExpM eigensolver path with Pade exponential
 * `c204a82c` Add linalg dtype smoke tests
@@ -61,6 +62,8 @@ Visible changes for Python users:
 * `cytnx.linalg.Lanczos_Exp()` uses `cytnx.linalg.ExpH()` for Hermitian projected Krylov exponentials, and preserves precision. Real Hermitian operators with real prefactors remain real and are no longer converted to complex.
 * `cytnx.linalg.Lanczos_Exp()` uses more reliable error estimate instead of the old projected-matrix last-component heuristic. The default tolerance is now `1e-8`, and requests below the useful dtype-dependent numerical scale are raised with a warning.
 * `cytnx.linalg.Lanczos_Exp()` now accepts CPU block `UniTensor` inputs. The Krylov basis is kept as `UniTensor` objects and the result is reconstructed as a linear combination of those basis vectors, instead of packing the basis into a dense buffer. This is important for block-symmetric TDVP and other tensor-network code that evolves block `UniTensor` states.
+* `UniTensor.flattened_dimension()` returns the number of scalar elements stored in the current dense or block representation. This is the correct dimension to use for Krylov/vector-space checks. For symmetric `UniTensor` objects, `shape()` remains the external total leg dimensions and should not be treated as the flattened vector dimension.
+* Python `UniTensor.leg_layout()` and `UniTensor.block_layout()` expose block metadata for symmetric tensors without changing `shape()`. `leg_layout()` reports labels, total dimensions, bond directions, qnums and degeneracies. `block_layout()` reports stored block shapes, sizes, qindices and per-leg sector metadata. `cytnx.flattened_dimension_from_block_layout(layout)` sums a block-layout object back to the stored flattened dimension.
 * `cytnx.linalg.ExpM()` uses a scaling-and-squaring Pade implementation instead of diagonalizing the matrix and inverting the eigenvector matrix. This is substantially more robust for non-normal matrices. `ExpM()` for Float and Double matrices with real scale coefficients no longer converts to ComplexFloat/ComplexDouble.
 * `cytnx.linalg.Lq()` is available for dense Tensor and dense UniTensor inputs. Together with `cytnx.linalg.Qr()`, this gives a QR/LQ canonicalization path for tensor-network code that does not need singular values.
 * Python `cytnx.linalg.Svd_truncate()` now treats missing or zero cutoffs as potentially dangerous:
@@ -117,16 +120,18 @@ Then run the existing calculation. The most common follow-up fixes are:
 
 2. If a `LinOp` dimension error appears, check the `matvec()` implementation. The output must have the same flattened element count as the input.
 
-3. Krylov solvers now require an explicit initial `UniTensor`. If old code relied on an empty initial vector and constructor `nx` metadata to choose a random start, create the initial vector explicitly before calling the solver.
+3. For block-symmetric `UniTensor` objects, do not use `shape()` to infer Krylov/vector length. Use `flattened_dimension()` for the stored vector dimension, and use `leg_layout()` / `block_layout()` if code needs to inspect qnum sectors or block sizes.
 
-4. If an old Gnd call fails because it used `CvgCrit=...`, replace it with `residual_tol=...`. If unsure, start with:
+4. Krylov solvers now require an explicit initial `UniTensor`. If old code relied on an empty initial vector and constructor `nx` metadata to choose a random start, create the initial vector explicitly before calling the solver.
+
+5. If an old Gnd call fails because it used `CvgCrit=...`, replace it with `residual_tol=...`. If unsure, start with:
 
    ```python
    cytnx.linalg.Lanczos(Hop, Tin, method="Gnd", residual_tol=1e-14, Maxiter=20)
    ```
    For DMRG-type solvers, it is generally better to use fewer iterations (perhaps 4 or 5), but make sure that there are enough sweeps to converge.
 
-5. If `method="ER"` fails, replace it with an ARPACK selector for standalone eigenvalue problems, usually:
+6. If `method="ER"` fails, replace it with an ARPACK selector for standalone eigenvalue problems, usually:
 
    ```python
    cytnx.linalg.Lanczos(Hop, Tin, which="SA")
@@ -134,9 +139,9 @@ Then run the existing calculation. The most common follow-up fixes are:
 
    For local DMRG-style solves where a fixed small number of matvecs is intended, use `method="Gnd"` with a sensible `Maxiter`.
 
-6. If `Svd_truncate()` warns about a missing cutoff, inspect that call site. If it is being used only to canonicalize an MPS and singular values are not needed, use `Qr()` or `Lq()` instead. If it is really truncating a bond, pass an explicit positive cutoff such as `err=1e-8`. If you deliberately want to keep numerical null vectors, pass `err=-1`.
+7. If `Svd_truncate()` warns about a missing cutoff, inspect that call site. If it is being used only to canonicalize an MPS and singular values are not needed, use `Qr()` or `Lq()` instead. If it is really truncating a bond, pass an explicit positive cutoff such as `err=1e-8`. If you deliberately want to keep numerical null vectors, pass `err=-1`.
 
-7. Read the Krylov diagnostic lines printed to stderr. They show dtype, matvec count, Krylov dimension, stopping reason, and residual/error information. You may prefer to incorporate some or all of this information into your own diagnostic output instead. The same information is available through:
+8. Read the Krylov diagnostic lines printed to stderr. They show dtype, matvec count, Krylov dimension, stopping reason, and residual/error information. You may prefer to incorporate some or all of this information into your own diagnostic output instead. The same information is available through:
 
    ```python
    cytnx.linalg.last_krylov_stats()
