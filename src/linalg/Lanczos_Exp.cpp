@@ -58,9 +58,19 @@ namespace cytnx {
       }
 
       double cvgcrit_floor_internal(const unsigned int dtype) {
+        // A non-reorthogonalized Lanczos basis loses orthogonality once Ritz values start
+        // to converge, which limits the attainable accuracy of any quantity computed from
+        // the basis to O(sqrt(eps)), not O(eps) (Paige). Below that floor the requested
+        // convergence criterion cannot be met, and pushing further past the orthogonality
+        // knee makes the realized error *worse* rather than better. Clamp the requested
+        // CvgCrit to ~sqrt(eps) of the working dtype.
         if (dtype == Type.Float || dtype == Type.ComplexFloat) {
-          return kBetaBreakdownRoundoff * std::numeric_limits<float>::epsilon();
+          // sqrt(float eps) ~ 3.45e-4. The previous value (100*float eps ~ 1.2e-5) was on
+          // the roundoff scale and ~30x too optimistic for unreorthogonalized Lanczos.
+          return std::sqrt(static_cast<double>(std::numeric_limits<float>::epsilon()));
         }
+        // sqrt(double eps) ~ 1.49e-8; kept at the round 1e-8 so the common CvgCrit=1e-8
+        // request is not clamped (and does not trigger the floor warning).
         return 1.0e-8;
       }
 
@@ -578,8 +588,14 @@ namespace cytnx {
 
       double _cvgcrit = CvgCrit;
 
+      // The sqrt(eps) floor reflects the accuracy limit of a *non-reorthogonalized* Lanczos
+      // basis, which only sets in after orthogonality is lost over many iterations. If the
+      // full Krylov space is reachable within Maxiter (Maxiter >= nx), the solve can still
+      // reach the exact full-space exponential by exhausting the space, so the floor must
+      // not clamp the request and force premature convergence at k < nx (codex review).
       const double cvgcrit_floor = cvgcrit_floor_internal(v0.dtype());
-      if (_cvgcrit < cvgcrit_floor) {
+      const bool krylov_space_exhaustible = Maxiter >= Hop->nx();
+      if (!krylov_space_exhaustible && _cvgcrit < cvgcrit_floor) {
         _cvgcrit = cvgcrit_floor;
         cytnx_warning_msg(
           should_warn_cvgcrit_floor_internal(v0.dtype()),
