@@ -32,6 +32,7 @@ The main focus for this branch is fixing the worst of the numerical algorithm pr
 
 Branch `fixes/general` adds:
 
+* `0b9d47c3` Harden typed storage element access
 * `f2551241` Add UniTensor layout metadata helpers
 * `34aa230a` Fix Exp dtype-changing paths and remove Expf
 * `0fd96560` Replace ExpM eigensolver path with Pade exponential
@@ -100,6 +101,10 @@ Visible changes for Python users:
 * Error messages no longer print raw stack traces by default in builds without debug symbols. Set `CYTNX_SHOW_STACKTRACE=1` to force the previous raw backtrace behavior, or `CYTNX_SHOW_STACKTRACE=0` to suppress stack traces explicitly.
 * The Python package imports NumPy before loading the Cytnx extension module. This avoids BLAS/LAPACK symbol load-order crashes in environments where importing Cytnx first breaks NumPy's own runtime checks.
 * The dead Python torch-backend import branch has been removed. This branch uses the normal Cytnx backend only.
+
+Visible changes for C++ users:
+
+* Typed element access now checks dtype in normal builds. Calls such as `tensor.item<double>()`, `tensor.at<double>(...)`, `unitensor.at<double>(...)`, or `storage.at<double>(...)` must match the actual stored dtype. For example, reading a `Float` tensor with `item<double>()` now raises an error instead of silently reinterpreting the raw `float` buffer as a `double`. Use the matching concrete type, such as `item<cytnx_float>()`, or use the scalar-proxy path, such as `item()` / `at(...)`, when code deliberately wants dtype-erased scalar conversion.
 
 # Getting existing code working with `fixes/general`
 
