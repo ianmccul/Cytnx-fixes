@@ -154,6 +154,14 @@ TEST_F(TensorTest, shape) {
   EXPECT_THROW(Tensor({0}, Type.Double, Device.cpu, true), std::logic_error);
 }
 
+TEST_F(TensorTest, ItemRejectsMismatchedDType) {
+  Tensor t({1}, Type.Float, Device.cpu);
+  t(0) = 1.0f;
+
+  EXPECT_FLOAT_EQ(t.item<cytnx_float>(), 1.0f);
+  EXPECT_THROW({ (void)t.item<cytnx_double>(); }, std::logic_error);
+}
+
 TEST_F(TensorTest, permute) {
   Tensor A({3, 4, 5}, Type.Double, Device.cpu);
   EXPECT_EQ(A.shape().size(), 3);

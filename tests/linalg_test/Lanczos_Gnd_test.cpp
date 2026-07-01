@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <complex>
+#include <vector>
 
 using namespace cytnx;
 using namespace testing;
@@ -14,7 +15,7 @@ namespace {
    public:
     OneSiteOp(const int d = 2, const int D = 5, const int dw = 3,
               const unsigned int dtype = Type.Double, const int& device = Device.cpu)
-        : LinOp("mv", D * D * d, dtype, device) {
+        : LinOp("mv", D * D * d, dtype, device), dtype_(dtype), device_(device) {
       if (!Type.is_float(dtype)) return;
       std::vector<UniTensor> LRO = CreateLRO(D, d, dw);
       L_ = LRO[0];
@@ -28,6 +29,8 @@ namespace {
     }
     UniTensor UT_init;
     UniTensor EffH;
+    unsigned int dtype_;
+    int device_;
 
     /*
      *         |-|--"vil" "pi" "vir"--|-|
@@ -54,13 +57,13 @@ namespace {
       double low = -1.0, high = 1.0;
       int seed = 0;
       UniTensor L =
-        UniTensor::uniform({D, dw, D}, low, high, {"vil", "Lm", "vol"}, seed, dtype(), device());
+        UniTensor::uniform({D, dw, D}, low, high, {"vil", "Lm", "vol"}, seed, dtype_, device_);
       seed = 1;
       UniTensor R =
-        UniTensor::uniform({D, dw, D}, low, high, {"vir", "Rm", "vor"}, seed, dtype(), device());
+        UniTensor::uniform({D, dw, D}, low, high, {"vir", "Rm", "vor"}, seed, dtype_, device_);
       seed = 1;
       UniTensor O = UniTensor::uniform({dw, d, dw, d}, low, high, {"Lm", "pi", "Rm", "po"}, seed,
-                                       dtype(), device());
+                                       dtype_, device_);
       L = L + L.permute({"vol", "Lm", "vil"}).Conj().contiguous();
       R = R + R.permute({"vor", "Rm", "vir"}).Conj().contiguous();
       O = O + O.permute({"Lm", "po", "Rm", "pi"}).Conj().contiguous();
@@ -71,7 +74,7 @@ namespace {
       double low = -1.0, high = 1.0;
       int seed = 0;
       UniTensor psi =
-        UniTensor::uniform({D, d, D}, low, high, {"vil", "pi", "vir"}, seed, dtype(), device());
+        UniTensor::uniform({D, d, D}, low, high, {"vil", "pi", "vir"}, seed, dtype_, device_);
       return psi;
     }
     UniTensor CreateEffH() {
@@ -148,6 +151,27 @@ namespace {
     UniTensor matvec_impl(const UniTensor& v) override { return 3.0 * v; }
   };
 
+  class DenseMatrixUniTensorOp : public LinOp {
+   public:
+    DenseMatrixUniTensorOp(const std::vector<std::vector<double>>& matrix,
+                           const unsigned int dtype = Type.Double)
+        : LinOp("mv", matrix.size(), dtype, Device.cpu),
+          matrix_(zeros({matrix.size(), matrix.size()}, dtype, Device.cpu)) {
+      for (cytnx_uint64 i = 0; i < matrix.size(); ++i) {
+        for (cytnx_uint64 j = 0; j < matrix[i].size(); ++j) {
+          matrix_(i, j) = matrix[i][j];
+        }
+      }
+    }
+
+    UniTensor matvec_impl(const UniTensor& v) override {
+      return UniTensor(linalg::Dot(matrix_, v.get_block_()));
+    }
+
+   private:
+    Tensor matrix_;
+  };
+
   UniTensor TwoStateInitialVector(const unsigned int dtype) {
     auto v = UniTensor::zeros({2, 1}, {}, dtype, Device.cpu).set_rowrank_(1);
     v.at({0, 0}) = 0.6;
@@ -155,8 +179,27 @@ namespace {
     return v;
   }
 
+  UniTensor ColumnVector(const std::vector<double>& values, const unsigned int dtype) {
+    auto v = UniTensor::zeros({values.size(), 1}, {}, dtype, Device.cpu).set_rowrank_(1);
+    for (cytnx_uint64 i = 0; i < values.size(); ++i) {
+      v.at({i, 0}) = values[i];
+    }
+    return v;
+  }
+
+  double tensor_real_scalar_value(Tensor value) {
+    return static_cast<double>(value.item().real());
+  }
+
   double unitensor_residual_norm(LinOp& op, const UniTensor& eigvec, const double energy) {
-    return (op.matvec(eigvec) - energy * eigvec).Norm().item<double>();
+    return tensor_real_scalar_value((op.matvec(eigvec) - energy * eigvec).Norm());
+  }
+
+  double unitensor_norm(const UniTensor& v) { return tensor_real_scalar_value(v.Norm()); }
+
+  double unitensor_scalar_value(const UniTensor& v) {
+    auto block = v.get_block_();
+    return tensor_real_scalar_value(block);
   }
 
   void expect_reported_residual_consistent(const double reported, const double direct,
@@ -260,7 +303,7 @@ namespace {
 
     // check the number of the eigenvalues
     cytnx_uint64 lanczos_eigvals_len = lanczos_eigvals.shape()[0];
-    auto dtype = H.dtype();
+    auto dtype = H.dtype_;
     const double tolerance = (dtype == Type.ComplexFloat || dtype == Type.Float) ? 1.0e-4 : 1.0e-12;
     if (lanczos_eigvals_len != k) return false;
     for (cytnx_uint64 i = 0; i < k; ++i) {
@@ -506,7 +549,7 @@ TEST(Lanczos_Gnd, UniTensorOneDimensionalKrylovSpace) {
   auto eigs = linalg::Lanczos(&op, v, "Gnd", 1.0e-12, 10, 1, true);
 
   ASSERT_EQ(eigs.size(), 2);
-  const double energy = eigs[0].get_block_().item<double>();
+  const double energy = unitensor_scalar_value(eigs[0]);
   EXPECT_NEAR(energy, 3.0, 1.0e-12);
   const double residual = unitensor_residual_norm(op, eigs[1], energy);
 
@@ -523,6 +566,71 @@ TEST(Lanczos_Gnd, UniTensorOneDimensionalKrylovSpace) {
   expect_reported_residual_consistent(stats.final_residual, residual, 1.0e-12);
 }
 
+TEST(Lanczos_Gnd, UniTensorExactEigenvectorBreakdownReturnsEigenpair) {
+  DenseMatrixUniTensorOp op({{1.0, 0.0}, {0.0, 2.0}});
+  auto v = ColumnVector({1.0, 0.0}, Type.Double);
+  linalg::clear_krylov_stats();
+
+  auto eigs = linalg::Lanczos(&op, v, "Gnd", 1.0e-12, 20, 1, true);
+
+  ASSERT_EQ(eigs.size(), 2);
+  const double energy = unitensor_scalar_value(eigs[0]);
+  EXPECT_NEAR(energy, 1.0, 1.0e-12);
+  EXPECT_NEAR(unitensor_norm(eigs[1]), 1.0, 1.0e-12);
+  expect_reported_residual_consistent(linalg::last_krylov_stats().final_residual,
+                                      unitensor_residual_norm(op, eigs[1], energy), 1.0e-12);
+
+  const auto stats = linalg::last_krylov_stats();
+  EXPECT_EQ(stats.reason, "breakdown");
+  EXPECT_EQ(stats.krylov_dim, 1);
+  EXPECT_EQ(stats.matvec_count, 1);
+}
+
+TEST(Lanczos_Gnd, UniTensorIdentityReturnsNonzeroNormalizedEigenvector) {
+  DenseMatrixUniTensorOp op({{3.0, 0.0}, {0.0, 3.0}});
+  auto v = ColumnVector({1.0, 1.0}, Type.Double);
+
+  auto eigs = linalg::Lanczos(&op, v, "Gnd", 1.0e-12, 20, 1, true);
+
+  ASSERT_EQ(eigs.size(), 2);
+  const double energy = unitensor_scalar_value(eigs[0]);
+  EXPECT_NEAR(energy, 3.0, 1.0e-12);
+  EXPECT_NEAR(unitensor_norm(eigs[1]), 1.0, 1.0e-12);
+  EXPECT_LE(unitensor_residual_norm(op, eigs[1], energy), 1.0e-12);
+}
+
+TEST(Lanczos_Gnd, UniTensorRankOneProjectorReturnsNormalizedGroundVector) {
+  DenseMatrixUniTensorOp op({{1.0, 0.0}, {0.0, 0.0}});
+  auto v = ColumnVector({1.0, 1.0}, Type.Double);
+
+  auto eigs = linalg::Lanczos(&op, v, "Gnd", 1.0e-12, 20, 1, true);
+
+  ASSERT_EQ(eigs.size(), 2);
+  const double energy = unitensor_scalar_value(eigs[0]);
+  EXPECT_NEAR(energy, 0.0, 1.0e-12);
+  EXPECT_NEAR(unitensor_norm(eigs[1]), 1.0, 1.0e-12);
+  EXPECT_LE(unitensor_residual_norm(op, eigs[1], energy), 1.0e-12);
+}
+
+TEST(Lanczos_Gnd, FloatToleranceDoesNotStopBeforeFullSmallCouplingProblem) {
+  const double b = std::sqrt(7.0e-8);
+  DenseMatrixUniTensorOp op({{0.0, b, 0.0}, {b, 1.0, 1.0}, {0.0, 1.0, 0.0}}, Type.Float);
+  auto v = ColumnVector({1.0, 0.0, 0.0}, Type.Float);
+  linalg::clear_krylov_stats();
+
+  auto eigs = linalg::Lanczos(&op, v, "Gnd", 5.0e-8, 20, 1, true);
+
+  ASSERT_EQ(eigs.size(), 2);
+  const double energy = unitensor_scalar_value(eigs[0]);
+  EXPECT_NEAR(energy, -0.618034, 1.0e-5);
+  EXPECT_LE(unitensor_residual_norm(op, eigs[1], energy), 1.0e-5);
+
+  const auto stats = linalg::last_krylov_stats();
+  EXPECT_EQ(stats.residual_tol_requested, 5.0e-8);
+  EXPECT_EQ(stats.residual_tol_used, 5.0e-8);
+  EXPECT_EQ(stats.maxiter_used, 3);
+}
+
 TEST(Lanczos_Gnd, UniTensorMaxiterIsCappedAtNx) {
   RecordingDiagonalOp op(Type.Double);
   auto v = TwoStateInitialVector(Type.Double);
@@ -531,7 +639,7 @@ TEST(Lanczos_Gnd, UniTensorMaxiterIsCappedAtNx) {
   auto eigs = linalg::Lanczos(&op, v, "Gnd", 1.0e-100, 20, 1, true);
 
   ASSERT_EQ(eigs.size(), 2);
-  const double energy = eigs[0].get_block_().item<double>();
+  const double energy = unitensor_scalar_value(eigs[0]);
   EXPECT_NEAR(energy, -1.0, 1.0e-12);
   const double residual = unitensor_residual_norm(op, eigs[1], energy);
 

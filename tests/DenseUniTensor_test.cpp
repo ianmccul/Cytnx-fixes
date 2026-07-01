@@ -1350,7 +1350,6 @@ describe:test at
 ====================*/
 TEST_F(DenseUniTensorTest, at) {
   auto ut_src = UniTensor({Bond(3), Bond(4), Bond(2)});
-  const UniTensor cut = UniTensor({Bond(3), Bond(4), Bond(2)});
   auto loc = std::vector<cytnx_uint64>({0, 1, 0});
   for (auto dtype : dtype_list) {
     auto ut = ut_src.clone();
@@ -1359,98 +1358,131 @@ TEST_F(DenseUniTensorTest, at) {
         ut = ut.astype(dtype);
         auto elem = complex<double>(1, -1);
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
         EXPECT_EQ(ut.at<complex<double>>(loc), elem);
-        EXPECT_EQ(cut.at(loc), complex<double>());
-        EXPECT_EQ(cut.at<complex<double>>(loc), complex<double>());
+        EXPECT_EQ(cut.at(loc), elem);
+        EXPECT_EQ(cut.at<complex<double>>(loc), elem);
       } break;
       case Type.ComplexFloat: {
         ut = ut.astype(dtype);
         auto elem = complex<float>(1, -1);
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
         EXPECT_EQ(ut.at<complex<float>>(loc), elem);
-        EXPECT_EQ(cut.at(loc), complex<float>());
-        EXPECT_EQ(cut.at<complex<float>>(loc), complex<float>());
+        EXPECT_EQ(cut.at(loc), elem);
+        EXPECT_EQ(cut.at<complex<float>>(loc), elem);
       } break;
       case Type.Double: {
         ut = ut.astype(dtype);
         auto elem = double(1);
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
         EXPECT_EQ(ut.at<double>(loc), elem);
-        EXPECT_EQ(cut.at(loc), double());
-        EXPECT_EQ(cut.at<double>(loc), double());
+        EXPECT_EQ(cut.at(loc), elem);
+        EXPECT_EQ(cut.at<double>(loc), elem);
       } break;
       case Type.Float: {
         ut = ut.astype(dtype);
         auto elem = float(1);
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
         EXPECT_EQ(ut.at<float>(loc), elem);
-        EXPECT_EQ(cut.at(loc), float());
-        EXPECT_EQ(cut.at<float>(loc), float());
+        EXPECT_EQ(cut.at(loc), elem);
+        EXPECT_EQ(cut.at<float>(loc), elem);
       } break;
       case Type.Int64: {
         ut = ut.astype(dtype);
         auto elem = cytnx_int64(1);
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
         EXPECT_EQ(ut.at<cytnx_int64>(loc), elem);
-        EXPECT_EQ(cut.at(loc), cytnx_int64());
-        EXPECT_EQ(cut.at<cytnx_int64>(loc), cytnx_int64());
+        EXPECT_EQ(cut.at(loc), elem);
+        EXPECT_EQ(cut.at<cytnx_int64>(loc), elem);
       } break;
       case Type.Uint64: {
         ut = ut.astype(dtype);
         auto elem = cytnx_uint64(1);
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
         EXPECT_EQ(ut.at<cytnx_uint64>(loc), elem);
-        EXPECT_EQ(cut.at(loc), cytnx_uint64());
-        EXPECT_EQ(cut.at<cytnx_uint64>(loc), cytnx_uint64());
+        EXPECT_EQ(cut.at(loc), elem);
+        EXPECT_EQ(cut.at<cytnx_uint64>(loc), elem);
       } break;
       case Type.Int32: {
         ut = ut.astype(dtype);
         auto elem = cytnx_int32(1);
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
         EXPECT_EQ(ut.at<cytnx_int32>(loc), elem);
-        EXPECT_EQ(cut.at(loc), cytnx_int32());
-        EXPECT_EQ(cut.at<cytnx_int32>(loc), cytnx_int32());
+        EXPECT_EQ(cut.at(loc), elem);
+        EXPECT_EQ(cut.at<cytnx_int32>(loc), elem);
       } break;
       case Type.Uint32: {
         ut = ut.astype(dtype);
         auto elem = cytnx_uint32(1);
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
         EXPECT_EQ(ut.at<cytnx_uint32>(loc), elem);
-        EXPECT_EQ(cut.at(loc), cytnx_uint32());
-        EXPECT_EQ(cut.at<cytnx_uint32>(loc), cytnx_uint32());
+        EXPECT_EQ(cut.at(loc), elem);
+        EXPECT_EQ(cut.at<cytnx_uint32>(loc), elem);
       } break;
       case Type.Int16: {
         ut = ut.astype(dtype);
         auto elem = cytnx_int16(1);
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
         EXPECT_EQ(ut.at<cytnx_int16>(loc), elem);
-        EXPECT_EQ(cut.at(loc), cytnx_int16());
-        EXPECT_EQ(cut.at<cytnx_int16>(loc), cytnx_int16());
+        EXPECT_EQ(cut.at(loc), elem);
+        EXPECT_EQ(cut.at<cytnx_int16>(loc), elem);
       } break;
       case Type.Uint16: {
         ut = ut.astype(dtype);
         auto elem = cytnx_uint16(1);
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
         EXPECT_EQ(ut.at<cytnx_uint16>(loc), elem);
-        EXPECT_EQ(cut.at(loc), cytnx_uint16());
-        EXPECT_EQ(cut.at<cytnx_uint16>(loc), cytnx_uint16());
+        EXPECT_EQ(cut.at(loc), elem);
+        EXPECT_EQ(cut.at<cytnx_uint16>(loc), elem);
       } break;
       case Type.Bool: {
         ut = ut.astype(dtype);
         auto elem = true;
         ut.at(loc) = elem;
+        auto cut_mut = ut_src.clone().astype(dtype);
+        cut_mut.at(loc) = elem;
+        const auto cut = cut_mut;
         EXPECT_EQ(ut.at(loc), elem);
-        EXPECT_EQ(cut.at(loc), bool());
+        EXPECT_EQ(cut.at(loc), elem);
       } break;
       default:
         ASSERT_TRUE(false);

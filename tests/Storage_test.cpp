@@ -137,6 +137,14 @@ TYPED_TEST(vector_suite, from_vec_real) {
   EXPECT_EQ(sd.at<TypeParam>(1), e2);
 }
 
+TEST(Storage, TypedAtRejectsMismatchedDType) {
+  Storage storage(1, Type.Float, Device.cpu);
+  storage.at<cytnx_float>(0) = 1.0f;
+
+  EXPECT_FLOAT_EQ(storage.at<cytnx_float>(0), 1.0f);
+  EXPECT_THROW({ (void)storage.at<cytnx_double>(0); }, std::logic_error);
+}
+
 TYPED_TEST(vector_suite, storage_cpu_to_cpu) {
   auto e1 = TypeParam(2);
   auto e2 = TypeParam(7);
